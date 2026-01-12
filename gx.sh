@@ -39,6 +39,7 @@ Subcommands:
     so         Show git status
     gcub       Create a new branch and push to origin
     stomp      Force delete branch from origin
+    flatten    Flatten last N commits into one using rebase
     help       Show this message
 
 Examples:
@@ -51,6 +52,7 @@ Examples:
     gx so
     gx gcub <branchname>
     gx stomp <branchname>
+    gx flatten <number>
 EOF
 }
 
@@ -241,6 +243,52 @@ stomp() {
     echo "Successfully stomped $destination_branch with $current_branch"
 }
 
+flatten() {
+    # Ensure inside a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: not a git repository." >&2
+        return 2
+    fi
+
+    if [[ -z "${1-}" ]]; then
+        echo "Error: number of commits to flatten is required." >&2
+        return 1
+    fi
+
+    local num_commits="$1"
+
+    # Validate that the argument is a number
+    if ! [[ "$num_commits" =~ ^[0-9]+$ ]]; then
+        echo "Error: number of commits must be a positive integer." >&2
+        return 1
+    fi
+
+    # Need at least 2 commits to flatten
+    if (( num_commits < 2 )); then
+        echo "Error: need at least 2 commits to flatten." >&2
+        return 1
+    fi
+
+    echo "Flattening last $num_commits commits..."
+    
+    # Get the commit message from the oldest commit in the range (which will be HEAD~(num_commits-1))
+    local commit_message
+    commit_message=$(git log -1 --pretty=%B "HEAD~$((num_commits - 1))")
+    
+    # Use git rebase to squash all commits
+    # The approach: reset to the commit before our range, then recommit everything
+    local base_commit
+    base_commit=$(git rev-parse "HEAD~$num_commits")
+    
+    echo "Resetting to base commit..."
+    run_cmd git reset --soft "$base_commit"
+    
+    echo "Re-committing with message from oldest commit..."
+    run_cmd git commit -m "$commit_message"
+    
+    echo "Successfully flattened last $num_commits commits"
+}
+
 # Dispatch subcommands
 if [[ ${1-} == "" ]]; then
     usage
@@ -285,6 +333,10 @@ case "$cmd" in
         ;;
     stomp)
         stomp "$@"
+        exit 0
+        ;;
+    flatten)
+        flatten "$@"
         exit 0
         ;;
     help|-h|--help)
