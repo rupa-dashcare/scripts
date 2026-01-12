@@ -37,6 +37,8 @@ Subcommands:
     sad        Add all changes
     gcom       Commit with a message
     so         Show git status
+    gcub       Create a new branch and push to origin
+    stomp      Force delete branch from origin
     help       Show this message
 
 Examples:
@@ -47,6 +49,8 @@ Examples:
     gx sad
     gx gcom "commit message"
     gx so
+    gx gcub <branchname>
+    gx stomp <branchname>
 EOF
 }
 
@@ -99,7 +103,9 @@ glog() {
         return 2
     fi
 
-    run_cmd git log --pretty=tformat:"%C(auto)%H %C(green) %ad%x08%x08%x08%x08%x08%x08%C(reset)%C(auto) | %s%d %C(cyan)[%aE]%C(reset)" --graph --date=iso-local
+    local line_count="${1:-20}"
+
+    run_cmd git log -n "$line_count" --pretty=tformat:"%C(auto)%H %C(green) %ad%x08%x08%x08%x08%x08%x08%C(reset)%C(auto) | %s%d %C(cyan)[%aE]%C(reset)" --graph --date=iso-local
 }
 
 gpu() {
@@ -185,6 +191,56 @@ so() {
     run_cmd git status
 }
 
+gcub() {
+    # Ensure inside a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: not a git repository." >&2
+        return 2
+    fi
+
+    if [[ -z "${1-}" ]]; then
+        echo "Error: branch name is required." >&2
+        return 1
+    fi
+
+    local branch_name="$1"
+
+    echo "Creating and checking out branch: $branch_name"
+    run_cmd git checkout -b "$branch_name"
+
+    echo "Pushing $branch_name to origin..."
+    run_cmd git push -u origin "$branch_name"
+
+    echo "Successfully created and pushed branch $branch_name"
+}
+
+stomp() {
+    # Ensure inside a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: not a git repository." >&2
+        return 2
+    fi
+
+    if [[ -z "${1-}" ]]; then
+        echo "Error: branch name is required." >&2
+        return 1
+    fi
+
+    local destination_branch="$1"
+    local current_branch
+    if ! current_branch=$(current_branch); then
+        echo "Error: could not determine current branch (detached HEAD?)." >&2
+        return 3
+    fi
+
+    echo "WARNING: About to force push current branch '$current_branch' over destination branch '$destination_branch'"
+    
+    echo "Force pushing $current_branch to $destination_branch..."
+    run_cmd git push origin "$current_branch:$destination_branch" --force
+
+    echo "Successfully stomped $destination_branch with $current_branch"
+}
+
 # Dispatch subcommands
 if [[ ${1-} == "" ]]; then
     usage
@@ -221,6 +277,14 @@ case "$cmd" in
         ;;
     gcom)
         gcom "$@"
+        exit 0
+        ;;
+    gcub)
+        gcub "$@"
+        exit 0
+        ;;
+    stomp)
+        stomp "$@"
         exit 0
         ;;
     help|-h|--help)
