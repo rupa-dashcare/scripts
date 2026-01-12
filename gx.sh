@@ -30,29 +30,31 @@ usage() {
 Usage: $SCRIPT_NAME <subcommand> [args]
 
 Subcommands:
-    pullhard   Fetch and reset current branch to origin/<branch>
+    flatten    Flatten last N commits into one using rebase
+    gcom       Commit with a message
+    gcu        Checkout a branch
+    gcub       Create a new branch and push to origin
     glog       Show git log with graph and pretty printing
     gpu        Push current branch to origin
     gpuf       Force push current branch to origin
+    pullhard   Fetch and reset current branch to origin/<branch>
     sad        Add all changes
-    gcom       Commit with a message
     so         Show git status
-    gcub       Create a new branch and push to origin
-    stomp      Force delete branch from origin
-    flatten    Flatten last N commits into one using rebase
+    stomp      Force push current branch to destination branch
     help       Show this message
 
 Examples:
-    gx pullhard
-    gx glog
+    gx flatten <number>
+    gx gcom "commit message"
+    gx gcu <branchname>
+    gx gcub <branchname>
+    gx glog [num_lines]
     gx gpu
     gx gpuf
+    gx pullhard
     gx sad
-    gx gcom "commit message"
     gx so
-    gx gcub <branchname>
     gx stomp <branchname>
-    gx flatten <number>
 EOF
 }
 
@@ -193,6 +195,27 @@ so() {
     run_cmd git status
 }
 
+gcu() {
+    # Ensure inside a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: not a git repository." >&2
+        return 2
+    fi
+
+    if [[ -z "${1-}" ]]; then
+        echo "Error: branch name is required." >&2
+        return 1
+    fi
+
+    local branch_name="$1"
+
+    echo "Checking out branch: $branch_name"
+    run_cmd git checkout "$branch_name"
+
+    echo ""
+    so
+}
+
 gcub() {
     # Ensure inside a git repository
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
@@ -321,6 +344,10 @@ case "$cmd" in
         ;;
     so)
         so "$@"
+        exit 0
+        ;;
+    gcu)
+        gcu "$@"
         exit 0
         ;;
     gcom)
