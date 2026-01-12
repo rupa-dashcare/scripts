@@ -31,16 +31,16 @@ Usage: $SCRIPT_NAME <subcommand> [args]
 
 Subcommands:
     flatten    Flatten last N commits into one using rebase
-    gcom       Commit with a message
-    gcu        Checkout a branch
-    gcub       Create a new branch and push to origin
+    gcom       Commit staged changes with a labeled commit message locally
+    gcu        Checkout: Switch your current clone to point at another branch
+    gcub       Create a new branch and push local code to server
     glog       Show git log with graph and pretty printing
-    gpu        Push current branch to origin
-    gpuf       Force push current branch to origin
-    pullhard   Fetch and reset current branch to origin/<branch>
-    sad        Add all changes
-    so         Show git status
-    stomp      Force push current branch to destination branch
+    gpu        Push current branch to server
+    gpuf       Force push current branch to server
+    pullhard   Fetch and reset current branch to origin/<branch> on server
+    sad        Add all changes to staged list
+    so         Show git status, what branch you're on, and changes
+    stomp      Force push current branch to destination branch on server
     help       Show this message
 
 Examples:
