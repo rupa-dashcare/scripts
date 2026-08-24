@@ -94,7 +94,7 @@ describe('JiraTicketStore honours the policy before any network call', () => {
     const calls: { method: string; url: string }[] = [];
     const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ method: init?.method ?? 'GET', url: String(url) });
-      return new Response(JSON.stringify({ issues: [], total: 0, maxResults: 100 }), {
+      return new Response(JSON.stringify({ issues: [], isLast: true }), {
         status: 200, headers: { 'content-type': 'application/json' },
       });
     }) as typeof globalThis.fetch;
@@ -132,7 +132,7 @@ describe('JiraTicketStore honours the policy before any network call', () => {
     const { s, calls } = store();
     await s.search('project = CB');
     const body = calls[0]?.url ?? '';
-    expect(body).toContain('/rest/api/3/search');
+    expect(body).toContain('/rest/api/3/search/jql');
     expect(calls).toHaveLength(1);
   });
 
@@ -175,5 +175,64 @@ describe('API base URL selection', () => {
   it('tolerates a trailing slash', () => {
     expect(apiBaseUrl('https://casedrive.atlassian.net/')).toBe('https://casedrive.atlassian.net');
     expect(apiBaseUrl('https://casedrive.atlassian.net/', 'x')).toBe('https://api.atlassian.com/ex/jira/x');
+  });
+});
+
+describe('search pagination follows cursors, not startAt', () => {
+  function paging(pages: { issues: unknown[]; nextPageToken?: string; isLast?: boolean }[]) {
+    const bodies: Record<string, unknown>[] = [];
+    let n = 0;
+    const fetch = (async (_u: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')));
+      const page = pages[n] ?? { issues: [], isLast: true };
+      n += 1;
+      return new Response(JSON.stringify(page), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof globalThis.fetch;
+
+    const store = new JiraTicketStore({
+      apiBaseUrl: 'https://x', email: 'e@x.com', apiToken: 'tok-abcdefghij',
+      access: new ProjectAccess('RUPA'), fetch,
+    });
+    return { store, bodies };
+  }
+
+  const issue = (key: string) => ({ key, fields: { summary: key, status: { name: 'Staged' } } });
+
+  it('follows nextPageToken until isLast', async () => {
+    const { store, bodies } = paging([
+      { issues: [issue('RUPA-1')], nextPageToken: 'tok-a', isLast: false },
+      { issues: [issue('RUPA-2')], nextPageToken: 'tok-b', isLast: false },
+      { issues: [issue('RUPA-3')], isLast: true },
+    ]);
+
+    const found = await store.search('status = Staged');
+    expect(found.map((i) => i.key)).toEqual(['RUPA-1', 'RUPA-2', 'RUPA-3']);
+    expect(bodies[0]?.nextPageToken).toBeUndefined();
+    expect(bodies[1]?.nextPageToken).toBe('tok-a');
+    expect(bodies[2]?.nextPageToken).toBe('tok-b');
+  });
+
+  it('stops on isLast even when a token is still present', async () => {
+    const { store, bodies } = paging([
+      { issues: [issue('RUPA-1')], nextPageToken: 'tok-a', isLast: true },
+    ]);
+    await store.search('status = Staged');
+    expect(bodies).toHaveLength(1);
+  });
+
+  // A cron every 5 minutes must not be able to spin forever on a bad cursor.
+  it('refuses to page indefinitely', async () => {
+    const forever = Array.from({ length: 60 }, () => ({
+      issues: [issue('RUPA-1')], nextPageToken: 'same', isLast: false,
+    }));
+    const { store } = paging(forever);
+    await expect(store.search('status = Staged')).rejects.toThrow(/refusing to page further/);
+  });
+
+  it('still rejects issues outside the policy, whatever the page says', async () => {
+    const { store } = paging([{ issues: [issue('CB-9')], isLast: true }]);
+    await expect(store.search('status = Staged')).rejects.toThrow(/outside/);
   });
 });

@@ -90,28 +90,45 @@ export class JiraTicketStore implements TicketStore, Checkable {
     return this.query(this.access.confineRead(jql));
   }
 
+  /**
+   * POST /rest/api/3/search was removed by Atlassian (410 Gone) in favour of
+   * /rest/api/3/search/jql, which pages by opaque cursor rather than startAt
+   * and returns no total. See CHANGE-2046.
+   */
   private async query(jql: string): Promise<readonly Issue[]> {
     const out: Issue[] = [];
-    let startAt = 0;
-    for (;;) {
-      const page = await this.request<JiraSearch>('POST', '/rest/api/3/search', {
-        jql, startAt, maxResults: 100,
+    let nextPageToken: string | undefined;
+    let pages = 0;
+
+    do {
+      // A malformed cursor could otherwise loop forever on a 5-minute cron.
+      if (pages >= MAX_SEARCH_PAGES) {
+        throw new Error(`search exceeded ${MAX_SEARCH_PAGES} pages — refusing to page further`);
+      }
+      pages += 1;
+
+      const page = await this.request<JiraSearchPage>('POST', '/rest/api/3/search/jql', {
+        jql,
+        maxResults: 100,
         fields: ['summary', 'status', 'priority', 'duedate', 'labels', 'updated'],
+        ...(nextPageToken ? { nextPageToken } : {}),
       });
+
       for (const i of page.issues ?? []) {
         out.push({
           key: i.key as IssueKey,
-          summary: i.fields.summary ?? '',
-          status: (i.fields.status?.name ?? 'Staged') as Status,
-          priority: (i.fields.priority?.name ?? 'Medium') as Priority,
-          dueDate: i.fields.duedate ?? null,
-          labels: i.fields.labels ?? [],
-          updated: i.fields.updated ? new Date(i.fields.updated) : null,
+          summary: i.fields?.summary ?? '',
+          status: (i.fields?.status?.name ?? 'Staged') as Status,
+          priority: (i.fields?.priority?.name ?? 'Medium') as Priority,
+          dueDate: i.fields?.duedate ?? null,
+          labels: i.fields?.labels ?? [],
+          updated: i.fields?.updated ? new Date(i.fields.updated) : null,
         });
       }
-      startAt += page.maxResults ?? 100;
-      if (startAt >= (page.total ?? 0)) break;
-    }
+
+      nextPageToken = page.isLast === true ? undefined : page.nextPageToken;
+    } while (nextPageToken);
+
     // Belt and braces: prove confine() actually held rather than trusting it.
     this.access.assertReadable(out.map((i) => i.key));
     return out;
@@ -282,14 +299,17 @@ export interface ProjectInfo {
   readonly projectTypeKey: string;
 }
 
-interface JiraSearch {
-  issues?: { key: string; fields: {
+/** Shape of /rest/api/3/search/jql — cursor paged, no total. */
+interface JiraSearchPage {
+  issues?: { key: string; fields?: {
     summary?: string; status?: { name?: string }; priority?: { name?: string };
     duedate?: string | null; labels?: string[]; updated?: string;
   } }[];
-  total?: number;
-  maxResults?: number;
+  nextPageToken?: string;
+  isLast?: boolean;
 }
+
+const MAX_SEARCH_PAGES = 50;
 
 interface JiraTransitions {
   transitions: { id: string; name?: string; to?: { name?: string } }[];

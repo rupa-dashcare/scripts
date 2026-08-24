@@ -167,7 +167,7 @@ describe('JiraDoctor', () => {
 
     expect(seen.length).toBeGreaterThan(0);
     for (const { method, path } of seen) {
-      expect(method === 'GET' || (method === 'POST' && path === '/rest/api/3/search')).toBe(true);
+      expect(method === 'GET' || (method === 'POST' && path === '/rest/api/3/search/jql')).toBe(true);
     }
   });
 });

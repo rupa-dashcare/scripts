@@ -36,7 +36,7 @@ const SCOPE_PROBES = [
   { need: 'read statuses',    scope: 'read:issue-status:jira', method: 'GET',  path: (k: string) => `/rest/api/3/project/${k}/statuses` },
   { need: 'read fields',      scope: 'read:field:jira',        method: 'GET',  path: () => '/rest/api/3/field' },
   { need: 'read create meta', scope: 'read:issue-meta:jira',   method: 'GET',  path: (k: string) => `/rest/api/3/issue/createmeta?projectKeys=${k}` },
-  { need: 'search issues',    scope: 'read:issue:jira + read:jql:jira', method: 'POST', path: () => '/rest/api/3/search', body: (k: string) => ({ jql: `project = "${k}"`, maxResults: 1 }) },
+  { need: 'search issues',    scope: 'read:issue:jira + read:jql:jira', method: 'POST', path: () => '/rest/api/3/search/jql', body: (k: string) => ({ jql: `project = "${k}"`, maxResults: 1 }) },
 ] as const;
 
 /**
