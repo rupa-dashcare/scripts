@@ -37,7 +37,11 @@ npm run wf -- ...  # the CLI: doctor | ingest
    nothing new. `test/pipeline.test.ts` guards this; it is the most important test here.
 5. **Agent operations must be plannable.** Every `Operation` exposes `plan()` before
    `execute(plan)`, so a write cannot skip the dry-run the user confirms.
-6. **The dependency rule** — `domain` imports nothing; `core` imports `domain` + `ports`;
+6. **Jira access is a hard boundary.** Writes go to `RUPA` and nowhere else; reads span
+   `RUPA`, `PP` and `DL` and nothing else. Every Jira call routes through `ProjectAccess`
+   — reads are *wrapped* in a `project IN (...)` clause rather than validated, and write
+   keys are checked before any HTTP call. Never add a Jira call that bypasses it.
+7. **The dependency rule** — `domain` imports nothing; `core` imports `domain` + `ports`;
    only `container.ts` imports `adapters`. `npm run arch` enforces it and will fail CI.
 
 ### Adding a source

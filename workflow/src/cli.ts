@@ -172,7 +172,7 @@ program
     }
 
     const target = opts.key?.length
-      ? opts.key.map((k) => k as never)
+      ? c.access.writeKeysFor(opts.key)
       : opts.all
         ? (await c.tickets.search(jql)).map((i) => i.key)
         : null;

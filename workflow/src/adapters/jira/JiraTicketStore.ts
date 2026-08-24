@@ -3,12 +3,14 @@ import type {
   DedupeKey, Issue, IssueKey, IssuePatch, Priority, Status, TicketDraft,
 } from '../../domain/types';
 import { dedupeLabel } from '../../domain/fingerprint';
+import type { ProjectAccess } from '../../domain/ProjectAccess';
 
 export interface JiraOptions {
   readonly baseUrl: string;
   readonly email: string;
   readonly apiToken: string;
-  readonly projectKey: string;
+  /** Every read and write is confined to this policy. See ProjectAccess. */
+  readonly access: ProjectAccess;
   readonly fieldSource?: string;
   readonly fieldSourceKey?: string;
   readonly fieldSourceUrl?: string;
@@ -20,9 +22,16 @@ export interface JiraOptions {
 export class JiraTicketStore implements TicketStore, Checkable {
   readonly checkName = 'jira';
   private readonly http: typeof globalThis.fetch;
+  private readonly access: ProjectAccess;
 
   constructor(private readonly opts: JiraOptions) {
     this.http = opts.fetch ?? globalThis.fetch;
+    this.access = opts.access;
+  }
+
+  /** Convenience for the adapter's own queries and URLs. */
+  private get projectKey(): string {
+    return this.access.writeKey;
   }
 
   async findExisting(keys: readonly DedupeKey[]): Promise<ReadonlySet<DedupeKey>> {
@@ -32,8 +41,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
     // JQL has a practical clause limit; chunk rather than risk a 400.
     for (const chunk of chunked(keys, 100)) {
       const labels = chunk.map((k) => `"${dedupeLabel(k)}"`).join(', ');
-      const jql = `project = "${this.opts.projectKey}" AND labels IN (${labels})`;
-      const issues = await this.search(jql);
+      const issues = await this.query(this.access.confineWrite(`labels IN (${labels})`));
       for (const issue of issues) {
         for (const label of issue.labels) {
           const m = /^srckey-([0-9a-f]{16})$/.exec(label);
@@ -46,7 +54,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
 
   async create(draft: TicketDraft): Promise<IssueKey> {
     const fields: Record<string, unknown> = {
-      project: { key: this.opts.projectKey },
+      project: { key: this.projectKey },
       summary: draft.title,
       issuetype: { name: 'Task' },
       description: adf(draft.description),
@@ -59,7 +67,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
     if (this.opts.fieldSourceUrl) fields[this.opts.fieldSourceUrl] = draft.url;
 
     const body = await this.request<{ key: string }>('POST', '/rest/api/3/issue', { fields });
-    const key = body.key as IssueKey;
+    const key = this.access.writeKeyFor(body.key);
 
     // A remote link makes "view original" one click (§6).
     await this.request('POST', `/rest/api/3/issue/${key}/remotelink`, {
@@ -69,7 +77,12 @@ export class JiraTicketStore implements TicketStore, Checkable {
     return key;
   }
 
+  /** Public read path. Confined to the readable projects, never wider. */
   async search(jql: string): Promise<readonly Issue[]> {
+    return this.query(this.access.confineRead(jql));
+  }
+
+  private async query(jql: string): Promise<readonly Issue[]> {
     const out: Issue[] = [];
     let startAt = 0;
     for (;;) {
@@ -90,10 +103,13 @@ export class JiraTicketStore implements TicketStore, Checkable {
       startAt += page.maxResults ?? 100;
       if (startAt >= (page.total ?? 0)) break;
     }
+    // Belt and braces: prove confine() actually held rather than trusting it.
+    this.access.assertReadable(out.map((i) => i.key));
     return out;
   }
 
-  async transition(keys: readonly IssueKey[], to: Status): Promise<void> {
+  async transition(rawKeys: readonly IssueKey[], to: Status): Promise<void> {
+    const keys = this.access.writeKeysFor(rawKeys);
     for (const key of keys) {
       const { transitions } = await this.request<JiraTransitions>(
         'GET', `/rest/api/3/issue/${key}/transitions`,
@@ -106,7 +122,8 @@ export class JiraTicketStore implements TicketStore, Checkable {
     }
   }
 
-  async update(keys: readonly IssueKey[], patch: IssuePatch): Promise<void> {
+  async update(rawKeys: readonly IssueKey[], patch: IssuePatch): Promise<void> {
+    const keys = this.access.writeKeysFor(rawKeys);
     for (const key of keys) {
       const fields: Record<string, unknown> = {};
       if (patch.priority) fields.priority = { name: patch.priority };
@@ -128,7 +145,8 @@ export class JiraTicketStore implements TicketStore, Checkable {
     }
   }
 
-  async comment(key: IssueKey, body: string): Promise<void> {
+  async comment(rawKey: IssueKey, body: string): Promise<void> {
+    const key = this.access.writeKeyFor(rawKey);
     await this.request('POST', `/rest/api/3/issue/${key}/comment`, { body: adf(body) });
   }
 
@@ -136,7 +154,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
     try {
       const me = await this.request<{ displayName: string }>('GET', '/rest/api/3/myself');
       const proj = await this.request<{ name: string }>(
-        'GET', `/rest/api/3/project/${this.opts.projectKey}`,
+        'GET', `/rest/api/3/project/${this.projectKey}`,
       );
       return { ok: true, detail: `${me.displayName} → project "${proj.name}"` };
     } catch (e) {
@@ -152,7 +170,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
   async projectInfo(): Promise<ProjectInfo> {
     const p = await this.request<{
       name: string; isPrivate?: boolean; style?: string; projectTypeKey?: string;
-    }>('GET', `/rest/api/3/project/${this.opts.projectKey}`);
+    }>('GET', `/rest/api/3/project/${this.projectKey}`);
     return {
       name: p.name,
       isPrivate: p.isPrivate === true,
@@ -163,7 +181,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
 
   async projectStatuses(): Promise<readonly { issueType: string; statuses: readonly string[] }[]> {
     const raw = await this.request<{ name: string; statuses: { name: string }[] }[]>(
-      'GET', `/rest/api/3/project/${this.opts.projectKey}/statuses`,
+      'GET', `/rest/api/3/project/${this.projectKey}/statuses`,
     );
     return raw.map((t) => ({ issueType: t.name, statuses: t.statuses.map((s) => s.name) }));
   }
@@ -172,7 +190,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
   async createMeta(): Promise<readonly string[]> {
     const meta = await this.request<{ projects?: { issuetypes?: { name: string }[] }[] }>(
       'GET',
-      `/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(this.opts.projectKey)}`,
+      `/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(this.projectKey)}`,
     );
     return meta.projects?.[0]?.issuetypes?.map((t) => t.name) ?? [];
   }

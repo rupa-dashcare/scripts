@@ -6,6 +6,7 @@ import { JiraDoctor } from './adapters/jira/JiraDoctor';
 import { JiraTicketStore } from './adapters/jira/JiraTicketStore';
 import { KvCredentialStore } from './adapters/cloudflare/KvCredentialStore';
 import { SlackSource } from './adapters/slack/SlackSource';
+import { ProjectAccess } from './domain/ProjectAccess';
 import { Dedupe } from './core/Dedupe';
 import { DeterministicDrafter } from './core/DeterministicDrafter';
 import { Pipeline } from './core/Pipeline';
@@ -25,6 +26,7 @@ export interface Container {
   readonly sources: SourceRegistry;
   readonly checks: readonly Checkable[];
   readonly setup: SetupInspector;
+  readonly access: ProjectAccess;
 }
 
 export const systemClock: Clock = { now: () => new Date() };
@@ -39,11 +41,14 @@ export function buildContainer(
   clock: Clock = systemClock,
   log: Logger = consoleLogger,
 ): Container {
+  // One policy object, constructed once, threaded through every Jira call.
+  const access = new ProjectAccess(config.jira.projectKey, config.jira.readProjectKeys);
+
   const jira = new JiraTicketStore({
     baseUrl: config.jira.baseUrl,
     email: config.jira.email,
     apiToken: config.jira.apiToken,
-    projectKey: config.jira.projectKey,
+    access,
     fieldSource: config.jira.fieldSource,
     fieldSourceKey: config.jira.fieldSourceKey,
     fieldSourceUrl: config.jira.fieldSourceUrl,
@@ -95,7 +100,7 @@ export function buildContainer(
     config.jira.baseUrl.replace(/\/+$/, ''),
   );
 
-  return { config, tickets: jira, credentials: kv, pipeline, sources, checks, setup };
+  return { config, tickets: jira, credentials: kv, pipeline, sources, checks, setup, access };
 }
 
 function fmt(meta: Record<string, unknown>): string {

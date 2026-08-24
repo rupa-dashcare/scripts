@@ -6,6 +6,8 @@ const Schema = z.object({
     email: z.string().email(),
     apiToken: z.string().min(1),
     projectKey: z.string().min(1),
+    /** Extra projects the system may READ. It can never write outside projectKey. */
+    readProjectKeys: z.array(z.string()).default([]),
     fieldSource: z.string().optional(),
     fieldSourceKey: z.string().optional(),
     fieldSourceUrl: z.string().optional(),
@@ -36,6 +38,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       email: env.JIRA_EMAIL,
       apiToken: env.JIRA_API_TOKEN,
       projectKey: env.JIRA_PROJECT_KEY,
+      readProjectKeys: (env.JIRA_READ_PROJECT_KEYS ?? '')
+        .split(',').map((s) => s.trim()).filter(Boolean),
       fieldSource: env.JIRA_FIELD_SOURCE,
       fieldSourceKey: env.JIRA_FIELD_SOURCE_KEY,
       fieldSourceUrl: env.JIRA_FIELD_SOURCE_URL,

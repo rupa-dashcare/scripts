@@ -316,6 +316,52 @@ large backlog.
 
 ---
 
+## 6.5 Project access — a hard boundary
+
+**Atlassian API tokens cannot be scoped to a project.** Token scopes control capability
+(read / write / delete on resource types), never which project, so a token minted from my
+personal account can reach every project that account can reach — CB, CD, CF, DEV and the
+rest. That is the whole blast radius if this system misbehaves or its token leaks.
+
+The policy is narrower than the token:
+
+| | Projects |
+|---|---|
+| **Write** — create, transition, update, comment | `RUPA` only |
+| **Read** | `RUPA`, `PP` (DashCare App), `DL` (Data Lake) |
+| **Everything else** | no access at all |
+
+`ProjectAccess` enforces this, and every Jira call routes through it.
+
+**Reads wrap, they do not validate.** Validating a JQL string against a blocklist is a
+losing game. Instead the caller's query is wrapped:
+
+```
+caller:   project = CB OR assignee = currentUser()
+sent:     project IN ("RUPA", "PP", "DL") AND (project = CB OR assignee = currentUser())
+```
+
+`AND` cannot be escaped from, so no clause the caller writes — including one a model
+invents in Phase 3 — can widen the result set. `ORDER BY` is lifted out first, because
+`a AND (b ORDER BY c)` is not valid JQL.
+
+**Writes check the key before the network.** Every issue key passes `writeKeyFor()`, which
+throws on anything that is not `RUPA-<n>`. The tests assert that a rejected write makes
+*zero* HTTP calls — the guard is not a server-side 403 we hope for, it is a local refusal.
+
+**Responses are checked too.** `assertReadable()` runs over every search result, so a bug in
+the wrapping surfaces as a loud failure rather than silent over-reach.
+
+### What this does and does not buy
+
+It guarantees **this system** cannot touch another project. It does **not** make the token
+itself safe — anything else holding that token still has full account access. The only real
+credential-level boundary is a separate Atlassian **service account** with access to `RUPA`,
+`PP` and `DL` alone, which needs org-admin rights and a licence seat. Worth doing if this
+ever runs somewhere I do not fully control; the code guard is the right control for now.
+
+---
+
 ## 7. The Slack agent — querying and bulk operations
 
 Yes, Slack works as the interface. DM the bot, or `/wf <question>` in any channel.
