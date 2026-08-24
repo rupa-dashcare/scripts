@@ -73,25 +73,25 @@ program
     const config = loadConfig();
     const site = config.jira.baseUrl.replace(/\/+$/, '');
     const key = config.jira.projectKey;
+    // RUPA is a team-managed *business* project, so settings live under /jira/core.
+    const settings = `${site}/jira/core/projects/${key}/settings`;
     console.log(`
-  One-time Jira setup — none of this can be done through the API without
+  One-time Jira setup. The project already exists — ${key} ("To Do's") — so this
+  is three edits, not a creation. None of it is reachable through the API without
   site-admin rights, so it is a browser job. See DESIGN.md §6.
 
-  1. Create the project
-     ${site}/jira/projects?create=true
-     · Type:  Team-managed  (lets you edit statuses and fields yourself,
-              with no Jira admin involved — a company-managed project
-              would need an admin for every step below)
-     · Key:   ${key}
-     · Access: Private
+  1. Make it private
+     ${settings}/access
+     It is currently visible to the whole site.
 
   2. Add the workflow statuses
-     ${site}/jira/software/projects/${key}/settings/workflow
+     ${settings}/workflows
      Staged → To Do → In Progress → Done, plus Rejected as a terminal state.
-     New issues must land in Staged.
+     New issues must land in Staged. (To Do, In Progress and Done already exist.)
 
-  3. Add three custom fields
-     ${site}/jira/software/projects/${key}/settings/fields
+  3. Add three fields to the Task issue type
+     ${settings}/issuetypes
+     Team-managed projects attach fields per issue type, so open Task and add:
      · Source      — short text
      · Source Key  — short text
      · Source URL  — URL
@@ -100,7 +100,7 @@ program
      https://id.atlassian.com/manage-profile/security/api-tokens
 
   5. Fill in .env, then run:  npm run wf -- doctor
-     doctor prints the exact JIRA_FIELD_* ids once the fields exist.
+     doctor verifies all of the above and prints the exact JIRA_FIELD_* ids.
 
   6. Push the same values as GitHub secrets:
      gh secret set JIRA_BASE_URL --body '${site}'

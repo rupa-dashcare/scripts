@@ -32,7 +32,7 @@ export class InMemoryTicketStore implements TicketStore {
 
   async create(draft: TicketDraft): Promise<IssueKey> {
     this.counter += 1;
-    const key = `INBOX-${this.counter}` as IssueKey;
+    const key = `RUPA-${this.counter}` as IssueKey;
     this.created.push(draft);
     this.issues.set(key, {
       key,

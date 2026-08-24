@@ -44,7 +44,7 @@ code.
                      └────────────────────────────────┬───────────────────────────┘
                                                       ▼
                                     ┌─────────────────────────────────┐
-                                    │  Jira: private project (INBOX)  │
+                                    │  Jira: private project (RUPA)  │
                                     │  status = Staged          │
                                     └─────────────────────────────────┘
                                                       ▲
@@ -109,7 +109,7 @@ interface SourceItem {
 | **Email — Microsoft 365 / Outlook** | MS Graph — see §3.1 | Outlook **category** `→jira`, or a dedicated mail folder | Categories are the Gmail-label analogue (`message.categories` on Graph). Whether Superhuman surfaces categories on an Outlook account is **untested** — the folder trigger is the guaranteed fallback. |
 | **Google Drive** | Drive API | Comment @-mentioning me, or a file landing in a watch folder | `comments.list` per changed file; `changes.list` with a page token for the folder watch. |
 | **Calendar** | Google Calendar API and/or Graph `Calendars.Read` | Event title/description matches a configured pattern | If the M365 account holds the real calendar, it comes free from the same Graph app registration. |
-| **Other Jira projects** | Same Jira API token | Issue assigned to me outside `INBOX` | Creates a linked mirror, not a copy. |
+| **Other Jira projects** | Same Jira API token | Issue assigned to me outside `RUPA` | Creates a linked mirror, not a copy. |
 
 **Superhuman has no public API**, and does not need one: it is a client over Gmail and
 Outlook, so polling those directly sees everything Superhuman sees.
@@ -152,7 +152,7 @@ wf auth graph --alias work
 
 **The client secret expires** — Entra caps them at 24 months, and many tenants clamp that far
 shorter by policy. That is a hard outage with a knowable date, so the system files a ticket
-against itself: a routine opens an `INBOX` issue 30 days before expiry. Rotating the secret
+against itself: a routine opens an `RUPA` issue 30 days before expiry. Rotating the secret
 does not invalidate the refresh token.
 
 ### 3.2 Rotation safety — the protocol that prevents lockout
@@ -194,7 +194,7 @@ Labels support exact `=` and `in`, so a **hashed label carries the dedup** and t
 key lives in a custom field for debugging. One batched query per run:
 
 ```
-project = INBOX AND labels IN (srckey-aaa, srckey-bbb, ...)
+project = RUPA AND labels IN (srckey-aaa, srckey-bbb, ...)
 ```
 
 Consequences worth stating plainly:
@@ -274,7 +274,7 @@ cheap to test. A status keeps one store, needs no backups, survives losing every
 costs only cosmetics: rejected tickets leave tombstones, and their issue keys are spent.
 
 It also means the Slack agent needs **no new operations**. A staged item is just
-`project = INBOX AND status = Staged`, so every bulk op from §7 already works on the queue, and
+`project = RUPA AND status = Staged`, so every bulk op from §7 already works on the queue, and
 approving in bulk is an ordinary `bulk_transition`.
 
 **Everything else in the project can ignore it:** boards, filters and reports carry
@@ -296,10 +296,14 @@ large backlog.
 
 ### Jira setup (manual, one time)
 
-- Private **team-managed** project, key `INBOX`. Team-managed matters: it lets me edit
-  statuses and custom fields myself, whereas a company-managed project needs a Jira admin
-  for every one of these steps. The site is `casedrive.atlassian.net`; none of the six
-  existing projects are private, so this one is new.
+- The project **already exists**: `RUPA` — "To Do's" on `casedrive.atlassian.net`, a
+  **team-managed business (Work Management)** project, currently empty. Team-managed is
+  what we want: statuses and fields can be edited without a Jira admin.
+- Two consequences of it being a *business* project rather than software: its settings live
+  under `/jira/core/projects/RUPA/…` (not `/jira/software/…`, which 404s), and team-managed
+  projects attach custom fields **per issue type**, so the three fields go on `Task`.
+- **It is currently visible to the whole site** (`isPrivate: false`). Requirement 3 says
+  private, so access needs restricting before anything real lands in it.
 - `wf setup` prints this checklist with the real URLs; `wf doctor` then verifies every
   item and prints the exact `JIRA_FIELD_*` ids to paste into `.env`.
 - Statuses: `Staged → To Do → In Progress → Done`, plus `Rejected` as a terminal state.
@@ -331,10 +335,10 @@ Flow: **NL → validated `Op` → run the JQL read-only → post a dry-run plan 
 ```
 You:  bump everything from last week's incident channel to High and due Friday
 Bot:  Plan: bulk_set_priority + bulk_set_due
-      JQL: project = INBOX AND labels = "src-slack-incidents" AND created >= -7d
+      JQL: project = RUPA AND labels = "src-slack-incidents" AND created >= -7d
       Matches 14 issues:
-        INBOX-231  Rotate the staging cert
-        INBOX-238  Follow up with vendor on the 4xx spike
+        RUPA-231  Rotate the staging cert
+        RUPA-238  Follow up with vendor on the 4xx spike
         … 12 more
       → Set priority High, due 2026-08-28
       [Confirm]  [Edit JQL]  [Cancel]
@@ -378,7 +382,7 @@ which satisfies the "in git" requirement for free.
 # workflow/routines/staging-digest.yaml
 name: staging-digest
 schedule: "0 9 * * 1-5"
-query: project = INBOX AND status = "Staged" ORDER BY created ASC
+query: project = RUPA AND status = "Staged" ORDER BY created ASC
 action: none                 # digest only; Approve all is a button on the message
 report_to: "#rupa-workflow"
 escalate_after: 7d           # nag

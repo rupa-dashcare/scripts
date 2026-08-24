@@ -4,7 +4,9 @@ interface JiraApi {
   listFields(): Promise<readonly { id: string; name: string }[]>;
   projectStatuses(): Promise<readonly { issueType: string; statuses: readonly string[] }[]>;
   createMeta(): Promise<readonly string[]>;
-  projectInfo(): Promise<{ name: string; isPrivate: boolean; style: string }>;
+  projectInfo(): Promise<{
+    name: string; isPrivate: boolean; style: string; projectTypeKey: string;
+  }>;
 }
 
 /** Field names the pipeline expects, in the order .env lists them. */
@@ -28,6 +30,17 @@ export class JiraDoctor implements SetupInspector {
     private readonly siteUrl: string,
   ) {}
 
+  /** Learned from checkProject(), which always runs first. */
+  private projectType = 'software';
+
+  /** Work-management projects live under /jira/core, software under /jira/software. */
+  private settings(projectTypeKey: string, page: string): string {
+    const area = projectTypeKey === 'business'
+      ? 'core'
+      : projectTypeKey === 'service_desk' ? 'servicedesk' : 'software';
+    return `${this.siteUrl}/jira/${area}/projects/${this.projectKey}/settings/${page}`;
+  }
+
   async inspect(): Promise<readonly SetupFinding[]> {
     const findings: SetupFinding[] = [];
 
@@ -42,15 +55,20 @@ export class JiraDoctor implements SetupInspector {
   private async checkProject(): Promise<SetupFinding> {
     try {
       const p = await this.api.projectInfo();
+      this.projectType = p.projectTypeKey;
       if (!p.isPrivate) {
         return {
           name: 'project is private',
           ok: false,
           detail: `"${p.name}" is visible to the whole site`,
-          remedy: `${this.siteUrl}/jira/software/projects/${this.projectKey}/settings/access — restrict access to yourself`,
+          remedy: `${this.settings(p.projectTypeKey, 'access')} — set access to Private`,
         };
       }
-      return { name: 'project is private', ok: true, detail: `"${p.name}" (${p.style})` };
+      return {
+        name: 'project is private',
+        ok: true,
+        detail: `"${p.name}" (${p.style}, ${p.projectTypeKey})`,
+      };
     } catch (e) {
       return {
         name: 'project exists',
@@ -88,7 +106,7 @@ export class JiraDoctor implements SetupInspector {
         name: 'workflow statuses',
         ok: false,
         detail: `missing: ${missing.join(', ')} (have: ${[...present].join(', ')})`,
-        remedy: `${this.siteUrl}/jira/software/projects/${this.projectKey}/settings/workflow — add the missing statuses. "Staged" must be the one new issues land in.`,
+        remedy: `${this.settings(this.projectType, 'workflows')} — add the missing statuses. "Staged" must be the status new issues land in.`,
       };
     } catch (e) {
       return { name: 'workflow statuses', ok: false, detail: msg(e) };
@@ -114,7 +132,7 @@ export class JiraDoctor implements SetupInspector {
           name: `field "${name}"`,
           ok: false,
           detail: 'does not exist in Jira',
-          remedy: `${this.siteUrl}/jira/software/projects/${this.projectKey}/settings/fields — add a custom field named "${name}"`,
+          remedy: `${this.settings(this.projectType, 'issuetypes')} — add a "${name}" field to the Task issue type (team-managed projects add fields per issue type)`,
         };
       }
       if (configured !== discovered) {

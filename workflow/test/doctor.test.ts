@@ -12,7 +12,7 @@ function api(over: Partial<Parameters<typeof make>[0]> = {}) {
     ],
     statuses: ['Staged', 'To Do', 'In Progress', 'Done', 'Rejected'],
     issueTypes: ['Task', 'Epic'],
-    project: { name: 'Inbox', isPrivate: true, style: 'next-gen' },
+    project: { name: "To Do's", isPrivate: true, style: 'next-gen', projectTypeKey: 'business' },
     ...over,
   });
 }
@@ -21,7 +21,7 @@ function make(o: {
   fields: { id: string; name: string }[];
   statuses: string[];
   issueTypes: string[];
-  project: { name: string; isPrivate: boolean; style: string } | Error;
+  project: { name: string; isPrivate: boolean; style: string; projectTypeKey: string } | Error;
 }) {
   return {
     async listFields() { return o.fields; },
@@ -44,7 +44,7 @@ function inspect(
   a: ReturnType<typeof api>,
   cfg: Readonly<Record<string, string | undefined>> = configured,
 ) {
-  return new JiraDoctor(a, 'INBOX', cfg, SITE).inspect();
+  return new JiraDoctor(a, 'RUPA', cfg, SITE).inspect();
 }
 
 describe('JiraDoctor', () => {
@@ -54,17 +54,30 @@ describe('JiraDoctor', () => {
   });
 
   it('flags a project that is not private', async () => {
-    const findings = await inspect(api({ project: { name: 'Inbox', isPrivate: false, style: 'next-gen' } }));
+    const findings = await inspect(api({
+      project: { name: "To Do's", isPrivate: false, style: 'next-gen', projectTypeKey: 'business' },
+    }));
     const f = findings.find((x) => x.name === 'project is private');
     expect(f?.ok).toBe(false);
     expect(f?.remedy).toContain('/settings/access');
+    // business projects live under /jira/core — /jira/software 404s
+    expect(f?.remedy).toContain('/jira/core/projects/RUPA/');
+    expect(f?.remedy).not.toContain('/jira/software/');
+  });
+
+  it('points a software project at /jira/software instead', async () => {
+    const findings = await inspect(api({
+      project: { name: 'Web App', isPrivate: false, style: 'classic', projectTypeKey: 'software' },
+    }));
+    const f = findings.find((x) => x.name === 'project is private');
+    expect(f?.remedy).toContain('/jira/software/projects/RUPA/');
   });
 
   it('tells you how to create a missing project', async () => {
     const findings = await inspect(api({ project: new Error('404 Not Found') }));
     const f = findings.find((x) => x.name === 'project exists');
     expect(f?.ok).toBe(false);
-    expect(f?.remedy).toContain('INBOX');
+    expect(f?.remedy).toContain('RUPA');
   });
 
   it('names exactly which statuses are missing', async () => {

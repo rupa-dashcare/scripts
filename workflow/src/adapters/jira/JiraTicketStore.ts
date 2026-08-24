@@ -149,11 +149,16 @@ export class JiraTicketStore implements TicketStore, Checkable {
     return this.request<{ id: string; name: string }[]>('GET', '/rest/api/3/field');
   }
 
-  async projectInfo(): Promise<{ name: string; isPrivate: boolean; style: string }> {
-    const p = await this.request<{ name: string; isPrivate?: boolean; style?: string }>(
-      'GET', `/rest/api/3/project/${this.opts.projectKey}`,
-    );
-    return { name: p.name, isPrivate: p.isPrivate === true, style: p.style ?? 'classic' };
+  async projectInfo(): Promise<ProjectInfo> {
+    const p = await this.request<{
+      name: string; isPrivate?: boolean; style?: string; projectTypeKey?: string;
+    }>('GET', `/rest/api/3/project/${this.opts.projectKey}`);
+    return {
+      name: p.name,
+      isPrivate: p.isPrivate === true,
+      style: p.style ?? 'classic',
+      projectTypeKey: p.projectTypeKey ?? 'software',
+    };
   }
 
   async projectStatuses(): Promise<readonly { issueType: string; statuses: readonly string[] }[]> {
@@ -190,6 +195,14 @@ export class JiraTicketStore implements TicketStore, Checkable {
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
+}
+
+export interface ProjectInfo {
+  readonly name: string;
+  readonly isPrivate: boolean;
+  readonly style: string;
+  /** software | business | service_desk — decides the settings URL shape. */
+  readonly projectTypeKey: string;
 }
 
 interface JiraSearch {

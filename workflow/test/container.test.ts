@@ -7,7 +7,7 @@ const BASE = {
   JIRA_BASE_URL: 'https://casedrive.atlassian.net',
   JIRA_EMAIL: 'rupa.patel@dashcaregroup.com',
   JIRA_API_TOKEN: 'token',
-  JIRA_PROJECT_KEY: 'INBOX',
+  JIRA_PROJECT_KEY: 'RUPA',
 } as NodeJS.ProcessEnv;
 
 const WITH_SLACK = {
