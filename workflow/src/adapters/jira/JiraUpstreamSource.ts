@@ -87,7 +87,11 @@ export class JiraUpstreamSource implements Checkable {
       await this.opts.tickets.search(`project IN (${mirrors.map((k) => `"${k}"`).join(', ')})`);
       return { ok: true, detail: `mirroring from ${mirrors.join(', ')} (read-only)` };
     } catch (e) {
-      return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        ok: false,
+        detail: /401|403|scope/i.test(msg) ? 'blocked by token scopes — see below' : msg,
+      };
     }
   }
 }

@@ -36,9 +36,9 @@ program
       console.log('    · cloudflare-kv      not configured (first needed in Phase 2)');
     }
 
-    // Project shape is only meaningful once Jira is actually reachable.
-    if (failed === 0) {
-      console.log('\n  project setup');
+    // Always run: when connectivity fails, this is the diagnosis, not a follow-up.
+    {
+      console.log('\n  token scopes and project setup');
       for (const f of await c.setup.inspect()) {
         if (!f.ok && !f.advisory) {
           failed += 1;
@@ -52,6 +52,11 @@ program
     if (remedies.length > 0) {
       console.log('\n  to fix');
       for (const r of remedies) console.log(`    · ${r}`);
+      if (remedies.some((r) => r.includes('add scope:'))) {
+        console.log('\n    Scopes cannot be edited after a token is created.');
+        console.log('    Mint a new token with these added, then revoke the old one:');
+        console.log('    https://id.atlassian.com/manage-profile/security/api-tokens');
+      }
     }
 
     if (opts.fields) {

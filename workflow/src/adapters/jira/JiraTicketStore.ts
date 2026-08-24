@@ -156,16 +156,25 @@ export class JiraTicketStore implements TicketStore, Checkable {
     await this.request('POST', `/rest/api/3/issue/${key}/comment`, { body: adf(body) });
   }
 
+  /**
+   * Probes the project, not /myself. Identity needs an account scope this token
+   * has no reason to carry, and a failure there says nothing about whether the
+   * pipeline can do its job.
+   */
   async check(): Promise<CheckResult> {
-    try {
-      const me = await this.request<{ displayName: string }>('GET', '/rest/api/3/myself');
+    const r = await this.probe('GET', `/rest/api/3/project/${this.projectKey}`);
+    if (r.ok) {
       const proj = await this.request<{ name: string }>(
         'GET', `/rest/api/3/project/${this.projectKey}`,
       );
-      return { ok: true, detail: `${me.displayName} → project "${proj.name}"` };
-    } catch (e) {
-      return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+      return { ok: true, detail: `project "${proj.name}" reachable` };
     }
+    return {
+      ok: false,
+      detail: r.status === 401 || r.status === 403
+        ? `${r.status} — token cannot read ${this.projectKey}; see scopes below`
+        : `HTTP ${r.status} ${r.message}`,
+    };
   }
 
   /** Discovers custom field ids so .env can be filled in — `wf doctor`. */
@@ -201,12 +210,38 @@ export class JiraTicketStore implements TicketStore, Checkable {
     return meta.projects?.[0]?.issuetypes?.map((t) => t.name) ?? [];
   }
 
+  /**
+   * Fires one request purely to learn whether the token carries the scope for it.
+   * Never throws — the status is the answer.
+   */
+  async probe(method: string, path: string, body?: unknown): Promise<ProbeResult> {
+    try {
+      const res = await this.http(`${this.opts.apiBaseUrl}${path}`, {
+        method,
+        headers: {
+          authorization: this.authHeader(),
+          accept: 'application/json',
+          ...(body ? { 'content-type': 'application/json' } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      const text = res.ok ? '' : (await res.text().catch(() => '')).slice(0, 200);
+      return { ok: res.ok, status: res.status, message: text };
+    } catch (e) {
+      return { ok: false, status: 0, message: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  private authHeader(): string {
+    const raw = `${this.opts.email}:${this.opts.apiToken}`;
+    return `Basic ${Buffer.from(raw).toString('base64')}`;
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const auth = Buffer.from(`${this.opts.email}:${this.opts.apiToken}`).toString('base64');
     const res = await this.http(`${this.opts.apiBaseUrl}${path}`, {
       method,
       headers: {
-        authorization: `Basic ${auth}`,
+        authorization: this.authHeader(),
         accept: 'application/json',
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
@@ -219,6 +254,12 @@ export class JiraTicketStore implements TicketStore, Checkable {
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
+}
+
+export interface ProbeResult {
+  readonly ok: boolean;
+  readonly status: number;
+  readonly message: string;
 }
 
 export interface ProjectInfo {

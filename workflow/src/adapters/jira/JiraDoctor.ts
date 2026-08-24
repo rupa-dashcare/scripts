@@ -1,6 +1,13 @@
 import type { SetupFinding, SetupInspector } from '../../ports/index';
 
+interface Probe {
+  readonly ok: boolean;
+  readonly status: number;
+  readonly message: string;
+}
+
 interface JiraApi {
+  probe(method: string, path: string, body?: unknown): Promise<Probe>;
   listFields(): Promise<readonly { id: string; name: string }[]>;
   projectStatuses(): Promise<readonly { issueType: string; statuses: readonly string[] }[]>;
   createMeta(): Promise<readonly string[]>;
@@ -17,6 +24,20 @@ const REQUIRED_FIELDS = [
 ] as const;
 
 const REQUIRED_STATUSES = ['Staged', 'To Do', 'In Progress', 'Done', 'Rejected'] as const;
+
+/**
+ * Every capability the pipeline needs, the call that exercises it, and the
+ * granular scope that call requires. Scoped API tokens fail with a bare
+ * "scope does not match", so mapping the failure back to a scope name is the
+ * difference between a two-minute fix and an afternoon of guessing.
+ */
+const SCOPE_PROBES = [
+  { need: 'read project',     scope: 'read:project:jira',      method: 'GET',  path: (k: string) => `/rest/api/3/project/${k}` },
+  { need: 'read statuses',    scope: 'read:issue-status:jira', method: 'GET',  path: (k: string) => `/rest/api/3/project/${k}/statuses` },
+  { need: 'read fields',      scope: 'read:field:jira',        method: 'GET',  path: () => '/rest/api/3/field' },
+  { need: 'read create meta', scope: 'read:issue-meta:jira',   method: 'GET',  path: (k: string) => `/rest/api/3/issue/createmeta?projectKeys=${k}` },
+  { need: 'search issues',    scope: 'read:issue:jira + read:jql:jira', method: 'POST', path: () => '/rest/api/3/search', body: (k: string) => ({ jql: `project = "${k}"`, maxResults: 1 }) },
+] as const;
 
 /**
  * Verifies the Jira project is shaped the way DESIGN.md §6 requires.
@@ -44,12 +65,41 @@ export class JiraDoctor implements SetupInspector {
   async inspect(): Promise<readonly SetupFinding[]> {
     const findings: SetupFinding[] = [];
 
+    // Scopes first: everything below fails confusingly without them.
+    const scopes = await this.checkScopes();
+    findings.push(...scopes);
+    if (scopes.some((f) => !f.ok)) return findings;
+
     findings.push(...(await this.checkProject()));
     findings.push(await this.checkIssueType());
     findings.push(await this.checkStatuses());
     findings.push(...(await this.checkFields()));
 
     return findings;
+  }
+
+  /** Names the missing scope instead of leaving you with a bare 401. */
+  private async checkScopes(): Promise<readonly SetupFinding[]> {
+    const out: SetupFinding[] = [];
+    for (const p of SCOPE_PROBES) {
+      const body = 'body' in p ? p.body(this.projectKey) : undefined;
+      const r = await this.api.probe(p.method, p.path(this.projectKey), body);
+
+      if (r.ok) {
+        out.push({ name: p.need, ok: true, detail: p.scope });
+        continue;
+      }
+      const scopeIssue = r.status === 401 || r.status === 403;
+      out.push({
+        name: p.need,
+        ok: false,
+        detail: scopeIssue
+          ? `token is missing ${p.scope}`
+          : `HTTP ${r.status} ${r.message}`,
+        ...(scopeIssue ? { remedy: `add scope: ${p.scope}` } : {}),
+      });
+    }
+    return out;
   }
 
   private async checkProject(): Promise<readonly SetupFinding[]> {

@@ -13,6 +13,7 @@ function api(over: Partial<Parameters<typeof make>[0]> = {}) {
     statuses: ['Staged', 'To Do', 'In Progress', 'Done', 'Rejected'],
     issueTypes: ['Task', 'Epic'],
     project: { name: "To Do's", isPrivate: true, style: 'next-gen', projectTypeKey: 'business' },
+    scopesOk: true,
     ...over,
   });
 }
@@ -22,8 +23,11 @@ function make(o: {
   statuses: string[];
   issueTypes: string[];
   project: { name: string; isPrivate: boolean; style: string; projectTypeKey: string } | Error;
+  scopesOk?: boolean;
 }) {
   return {
+    // Default: every scope granted, so existing tests exercise the checks below it.
+    async probe() { return { ok: o.scopesOk ?? true, status: (o.scopesOk ?? true) ? 200 : 401, message: '' }; },
     async listFields() { return o.fields; },
     async projectStatuses() { return [{ issueType: 'Task', statuses: o.statuses }]; },
     async createMeta() { return o.issueTypes; },
@@ -145,6 +149,57 @@ describe('JiraDoctor', () => {
       get(t, k: string) { calls.push(k); return (t as Record<string, unknown>)[k]; },
     });
     await inspect(spy as ReturnType<typeof api>);
-    expect(calls.every((c) => /^(listFields|projectStatuses|createMeta|projectInfo)$/.test(c))).toBe(true);
+    expect(calls.every((c) => /^(probe|listFields|projectStatuses|createMeta|projectInfo)$/.test(c)))
+      .toBe(true);
+  });
+
+  // POST /search is a read despite the verb; nothing else may be POSTed.
+  it('probes only read endpoints', async () => {
+    const seen: { method: string; path: string }[] = [];
+    const spy = {
+      ...api(),
+      async probe(method: string, path: string) {
+        seen.push({ method, path });
+        return { ok: true, status: 200, message: '' };
+      },
+    };
+    await inspect(spy as ReturnType<typeof api>);
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const { method, path } of seen) {
+      expect(method === 'GET' || (method === 'POST' && path === '/rest/api/3/search')).toBe(true);
+    }
+  });
+});
+
+describe('JiraDoctor — scope diagnosis', () => {
+  it('names the missing scope rather than leaving a bare 401', async () => {
+    const findings = await inspect(api({ scopesOk: false }));
+    const search = findings.find((f) => f.name === 'search issues');
+
+    expect(search?.ok).toBe(false);
+    expect(search?.detail).toContain('read:issue:jira');
+    expect(search?.remedy).toBe('add scope: read:issue:jira + read:jql:jira');
+  });
+
+  it('reports every missing capability, not just the first', async () => {
+    const findings = await inspect(api({ scopesOk: false }));
+    expect(findings.filter((f) => !f.ok).length).toBeGreaterThanOrEqual(5);
+    expect(findings.map((f) => f.name)).toEqual(
+      expect.arrayContaining(['read project', 'read fields', 'read create meta']),
+    );
+  });
+
+  // Project shape cannot be judged through a token that cannot read the project.
+  it('stops before the project checks when scopes are missing', async () => {
+    const findings = await inspect(api({ scopesOk: false }));
+    expect(findings.some((f) => f.name.startsWith('field "'))).toBe(false);
+    expect(findings.some((f) => f.name === 'workflow statuses')).toBe(false);
+  });
+
+  it('runs the project checks once scopes are satisfied', async () => {
+    const findings = await inspect(api());
+    expect(findings.some((f) => f.name === 'workflow statuses')).toBe(true);
+    expect(findings.every((f) => f.ok)).toBe(true);
   });
 });
