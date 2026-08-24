@@ -102,6 +102,9 @@ export function buildContainer(
         tickets: jira,
         access,
         siteUrl: config.jira.baseUrl.replace(/\/+$/, ''),
+        ...(config.jira.mirrorSkipStatuses.length > 0
+          ? { skipStatuses: config.jira.mirrorSkipStatuses }
+          : {}),
       })
     : null;
   if (upstream) sources.register(upstream);

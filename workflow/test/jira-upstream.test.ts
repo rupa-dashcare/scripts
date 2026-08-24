@@ -65,7 +65,28 @@ describe('JiraUpstreamSource', () => {
   it('skips finished work', async () => {
     const { src, queries } = source([]);
     await src.collect(WINDOW);
-    expect(queries[0]).toContain('status NOT IN ("Done", "Closed", "Resolved"');
+    expect(queries[0]).toContain('"Done"');
+    expect(queries[0]).toContain('"Closed"');
+  });
+
+  // Assignment is not action. The first live run found 27 issues, of which 21
+  // were blocked on a client and 2 were backlog — burying the 3 that mattered.
+  it('skips work that is blocked on somebody else, or not started', async () => {
+    const { src, queries } = source([]);
+    await src.collect(WINDOW);
+    for (const status of ['Awaiting Client Response', 'Blocked', 'Backlog']) {
+      expect(queries[0]).toContain(`"${status}"`);
+    }
+  });
+
+  it('honours a site-specific skip list', async () => {
+    const tickets = { queries: [] as string[], async search(jql: string) { this.queries.push(jql); return []; } };
+    const src = new JiraUpstreamSource({
+      tickets, access, siteUrl: SITE, skipStatuses: ['Parked', 'Icebox'],
+    });
+    await src.collect(WINDOW);
+    expect(tickets.queries[0]).toContain('"Parked", "Icebox"');
+    expect(tickets.queries[0]).not.toContain('"Backlog"');
   });
 
   // The first live run found 27 open issues last touched in April; a window

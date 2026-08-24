@@ -12,7 +12,24 @@ export interface JiraUpstreamOptions {
   readonly skipStatuses?: readonly string[];
 }
 
-const DEFAULT_SKIP = ['Done', 'Closed', 'Resolved', 'Cancelled', 'Canceled'];
+/**
+ * Assignment is not the same as action.
+ *
+ * The first live run surfaced 27 issues, of which 21 sat in "Awaiting Client
+ * Response" and 2 in "Backlog" — blocked on somebody else or not started.
+ * Mirroring those buries the three that actually need doing.
+ *
+ * Site-specific, so it is configurable; this default reflects casedrive's
+ * workflow. Statuses must match exactly — JQL has no wildcard for status.
+ */
+const DEFAULT_SKIP = [
+  // finished
+  'Done', 'Closed', 'Resolved', 'Cancelled', 'Canceled',
+  // blocked on someone else
+  'Awaiting Client Response', 'Awaiting Tab32 Response', 'Blocked', 'Waiting for support',
+  // not started
+  'Backlog',
+];
 
 /**
  * Mirrors issues assigned to me in the read-only projects (PP, DL, DEV) into

@@ -280,6 +280,17 @@ approving in bulk is an ordinary `bulk_transition`.
 **Everything else in the project can ignore it:** boards, filters and reports carry
 `status != Staged` and behave as though the queue were external.
 
+### Assignment is not action
+
+The first live run surfaced 27 open issues assigned to me. Of those, **21 sat in
+"Awaiting Client Response"** and 2 in "Backlog" — blocked on somebody else, or not started.
+Exactly **3** were mine to act on. Mirroring all 27 would have buried those three in a queue
+of things I cannot move, which is the failure the whole system exists to prevent.
+
+So the mirror skips statuses that mean *waiting*, not just *finished*. Status names are
+site-specific and JQL has no wildcard for them, so the list is enumerated and configurable
+via `JIRA_MIRROR_SKIP_STATUSES`; the built-in default matches casedrive's workflow.
+
 ### The mirror is not time-windowed
 
 Every other source is event-shaped — a Slack reaction, an email arriving — where a lookback
