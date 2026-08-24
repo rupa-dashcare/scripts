@@ -68,10 +68,19 @@ describe('JiraUpstreamSource', () => {
     expect(queries[0]).toContain('status NOT IN ("Done", "Closed", "Resolved"');
   });
 
-  it('formats the window as JQL expects', async () => {
+  // The first live run found 27 open issues last touched in April; a window
+  // would have hidden every one of them.
+  it('ignores the time window — assignment is a state, not an event', async () => {
     const { src, queries } = source([]);
     await src.collect(WINDOW);
-    expect(queries[0]).toContain('updated >= "2026/08/22 09:30"');
+    expect(queries[0]).not.toContain('updated');
+  });
+
+  it('returns stale issues that a window would have excluded', async () => {
+    const { src } = source([issue({ updated: new Date('2026-04-28T00:00:00Z') })]);
+    const items = await src.collect(WINDOW);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.occurredAt.getUTCFullYear()).toBe(2026);
   });
 
   // Without this the queue would consume its own output forever.

@@ -32,7 +32,20 @@ export class JiraUpstreamSource implements Checkable {
 
   constructor(private readonly opts: JiraUpstreamOptions) {}
 
-  async collect(window: TimeWindow): Promise<readonly SourceItem[]> {
+  /**
+   * Deliberately ignores the time window.
+   *
+   * Every other source is event-shaped: a Slack reaction, an email arriving —
+   * things that happen at a moment, where a window is the natural bound. "Issues
+   * assigned to me and not finished" is a *state*, not an event. An issue
+   * assigned four months ago and untouched since is still owed, and a window
+   * would hide it forever — which is exactly what happened on the first live
+   * run: 27 open issues, all last touched in April, all silently skipped.
+   *
+   * Re-reading the same set every run is cheap (one query) and harmless, because
+   * dedup by srckey label makes creation idempotent regardless.
+   */
+  async collect(_window: TimeWindow): Promise<readonly SourceItem[]> {
     const mirrors = this.opts.access.mirrorKeys;
     if (mirrors.length === 0) return [];
 
@@ -40,8 +53,7 @@ export class JiraUpstreamSource implements Checkable {
     const skip = (this.opts.skipStatuses ?? DEFAULT_SKIP).map((s) => `"${s}"`).join(', ');
 
     const jql = `project IN (${projects}) AND assignee = currentUser()`
-      + ` AND status NOT IN (${skip})`
-      + ` AND updated >= "${jqlDate(window.from)}"`;
+      + ` AND status NOT IN (${skip})`;
 
     const issues = await this.opts.tickets.search(jql);
 
@@ -94,11 +106,4 @@ export class JiraUpstreamSource implements Checkable {
       };
     }
   }
-}
-
-/** JQL wants `yyyy/MM/dd HH:mm`; anything else is rejected or misread. */
-function jqlDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}/${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}`
-    + ` ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }

@@ -280,6 +280,18 @@ approving in bulk is an ordinary `bulk_transition`.
 **Everything else in the project can ignore it:** boards, filters and reports carry
 `status != Staged` and behave as though the queue were external.
 
+### The mirror is not time-windowed
+
+Every other source is event-shaped — a Slack reaction, an email arriving — where a lookback
+window is the natural bound. "Assigned to me and not finished" is a **state**, not an event.
+An issue assigned four months ago and untouched since is still owed.
+
+The first live run proved this the hard way: 27 open issues assigned to me across `PP`, `DL`
+and `DEV`, every one last touched in April, every one silently skipped by a 30-day window.
+So `JiraUpstreamSource` ignores the window and asks for the whole open set each run. That is
+one query, and dedup by `srckey` label makes creation idempotent regardless — the same 27 can
+be re-read forever without producing a second ticket.
+
 ### A mirror can go stale
 
 If an upstream issue is closed or reassigned after it has been mirrored, the `RUPA` mirror
