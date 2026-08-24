@@ -24,10 +24,12 @@ function make(o: {
   issueTypes: string[];
   project: { name: string; isPrivate: boolean; style: string; projectTypeKey: string } | Error;
   scopesOk?: boolean;
+  siteStatuses?: string[];
 }) {
   return {
     // Default: every scope granted, so existing tests exercise the checks below it.
     async probe() { return { ok: o.scopesOk ?? true, status: (o.scopesOk ?? true) ? 200 : 401, message: '' }; },
+    async allStatuses() { return o.siteStatuses ?? ['Done', 'Backlog', 'Reopened']; },
     async listFields() { return o.fields; },
     async projectStatuses() { return [{ issueType: 'Task', statuses: o.statuses }]; },
     async createMeta() { return o.issueTypes; },
@@ -201,5 +203,33 @@ describe('JiraDoctor — scope diagnosis', () => {
     const findings = await inspect(api());
     expect(findings.some((f) => f.name === 'workflow statuses')).toBe(true);
     expect(findings.every((f) => f.ok)).toBe(true);
+  });
+});
+
+describe('JiraDoctor — mirror skip list', () => {
+  const inspectWith = (skip: string[], siteStatuses?: string[]) =>
+    new JiraDoctor(api(siteStatuses ? { siteStatuses } : {}), 'RUPA', configured, SITE, skip).inspect();
+
+  it('passes when every configured status is real', async () => {
+    const f = (await inspectWith(['Done', 'Backlog'])).find((x) => x.name === 'mirror skip list');
+    expect(f?.ok).toBe(true);
+  });
+
+  // A typo here does not error — it silently stops filtering.
+  it('flags a misspelled status rather than letting it fail silently', async () => {
+    const f = (await inspectWith(['Dnoe', 'Backlog'])).find((x) => x.name === 'mirror skip list');
+    expect(f?.ok).toBe(false);
+    expect(f?.detail).toContain('Dnoe');
+    expect(f?.detail).not.toContain('Backlog');
+  });
+
+  it('matches case-insensitively', async () => {
+    const f = (await inspectWith(['done', 'BACKLOG'])).find((x) => x.name === 'mirror skip list');
+    expect(f?.ok).toBe(true);
+  });
+
+  it('is advisory when nothing is configured', async () => {
+    const f = (await inspectWith([])).find((x) => x.name === 'mirror skip list');
+    expect(f?.advisory).toBe(true);
   });
 });

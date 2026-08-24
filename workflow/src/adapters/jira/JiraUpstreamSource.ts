@@ -27,8 +27,9 @@ const DEFAULT_SKIP = [
   'Done', 'Closed', 'Resolved', 'Cancelled', 'Canceled',
   // blocked on someone else
   'Awaiting Client Response', 'Awaiting Tab32 Response', 'Blocked', 'Waiting for support',
-  // not started
-  'Backlog',
+  // not started, or parked pending a decision — reopened work goes back in the
+  // queue rather than straight onto today's list
+  'Backlog', 'Reopened',
 ];
 
 /**

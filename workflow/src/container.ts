@@ -133,6 +133,7 @@ export function buildContainer(
       JIRA_FIELD_SOURCE_URL: config.jira.fieldSourceUrl,
     },
     config.jira.baseUrl.replace(/\/+$/, ''),
+    config.jira.mirrorSkipStatuses,
   );
 
   return { config, tickets: jira, credentials: kv, pipeline, sources, checks, setup, access };

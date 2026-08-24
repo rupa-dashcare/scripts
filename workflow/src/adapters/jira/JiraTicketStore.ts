@@ -221,6 +221,12 @@ export class JiraTicketStore implements TicketStore, Checkable {
     return raw.map((t) => ({ issueType: t.name, statuses: t.statuses.map((s) => s.name) }));
   }
 
+  /** Every status name defined on the site — used to validate the skip list. */
+  async allStatuses(): Promise<readonly string[]> {
+    const raw = await this.request<{ name: string }[]>('GET', '/rest/api/3/status');
+    return [...new Set(raw.map((s) => s.name))];
+  }
+
   /** Issue types this account may actually create in the project. */
   async createMeta(): Promise<readonly string[]> {
     const meta = await this.request<{ projects?: { issuetypes?: { name: string }[] }[] }>(

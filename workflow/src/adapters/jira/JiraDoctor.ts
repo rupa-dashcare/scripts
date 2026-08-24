@@ -8,6 +8,7 @@ interface Probe {
 
 interface JiraApi {
   probe(method: string, path: string, body?: unknown): Promise<Probe>;
+  allStatuses(): Promise<readonly string[]>;
   listFields(): Promise<readonly { id: string; name: string }[]>;
   projectStatuses(): Promise<readonly { issueType: string; statuses: readonly string[] }[]>;
   createMeta(): Promise<readonly string[]>;
@@ -49,6 +50,8 @@ export class JiraDoctor implements SetupInspector {
     private readonly projectKey: string,
     private readonly configured: Readonly<Record<string, string | undefined>>,
     private readonly siteUrl: string,
+    /** Statuses the mirror is configured to skip, for validation. */
+    private readonly mirrorSkipStatuses: readonly string[] = [],
   ) {}
 
   /** Learned from checkProject(), which always runs first. */
@@ -74,6 +77,7 @@ export class JiraDoctor implements SetupInspector {
     findings.push(await this.checkIssueType());
     findings.push(await this.checkStatuses());
     findings.push(...(await this.checkFields()));
+    findings.push(await this.checkSkipStatuses());
 
     return findings;
   }
@@ -164,6 +168,36 @@ export class JiraDoctor implements SetupInspector {
       };
     } catch (e) {
       return { name: 'workflow statuses', ok: false, detail: msg(e) };
+    }
+  }
+
+  /**
+   * Jira accepts an unknown status in `NOT IN` without complaint, so a typo here
+   * fails silently — the filter simply stops filtering, and the queue floods.
+   * Loud beats silent.
+   */
+  private async checkSkipStatuses(): Promise<SetupFinding> {
+    if (this.mirrorSkipStatuses.length === 0) {
+      return { name: 'mirror skip list', ok: true, advisory: true, detail: 'using built-in default' };
+    }
+    try {
+      const known = new Set((await this.api.allStatuses()).map((s) => s.toLowerCase()));
+      const unknown = this.mirrorSkipStatuses.filter((s) => !known.has(s.toLowerCase()));
+      if (unknown.length === 0) {
+        return {
+          name: 'mirror skip list',
+          ok: true,
+          detail: `${this.mirrorSkipStatuses.length} statuses, all recognised`,
+        };
+      }
+      return {
+        name: 'mirror skip list',
+        ok: false,
+        detail: `not a status on this site: ${unknown.join(', ')}`,
+        remedy: 'Jira ignores unknown statuses silently, so these filter nothing. Fix the spelling in JIRA_MIRROR_SKIP_STATUSES.',
+      };
+    } catch (e) {
+      return { name: 'mirror skip list', ok: true, advisory: true, detail: msg(e) };
     }
   }
 
