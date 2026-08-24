@@ -415,6 +415,37 @@ resulting issue keys, so a bad bulk edit is always reversible by hand.
 
 ---
 
+## 7.5 Logging
+
+When ingest fails at 03:00 on a cron, the log is the only evidence. It is structured
+JSON in CI (greppable) and aligned text in a terminal, every line stamped with a `run`
+id so one run can be isolated from a day of them.
+
+Logged: the pipeline lifecycle (started / per-source collect with timing / deduped /
+created / finished), and every HTTP call with method, path, status and duration.
+Failures carry the stack.
+
+**Credentials cannot reach a log line.** Every line passes through `Redactor` on the way
+out — there is no code path from a caller to the output that skips it. Two layers,
+because either alone leaks:
+
+- **Registered values.** Real secrets are primed from config at startup, so they are
+  removed wherever they appear, including their base64 form — which is what catches a
+  `Basic` header.
+- **Known shapes.** Patterns for Atlassian, Slack, Granola, Google, JWT and
+  `Authorization` headers, so a token that was never registered — read from a response,
+  or belonging to a source added later — still cannot survive.
+
+Plus key-name matching, so `{ apiToken: … }` is redacted whatever the value looks like.
+
+Two deliberate omissions: **query strings are not logged** (they carry JQL and user
+content), and neither are request/response bodies. Status codes and error text are enough
+to diagnose, and both are redacted anyway.
+
+`LOG_LEVEL=debug` turns on per-request lines. Default is `info`.
+
+---
+
 ## 8. Testing
 
 The requirement is that extending the system can't silently break it. Layers:

@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { loadConfig } from './config';
-import { buildContainer, consoleLogger, systemClock } from './container';
+import { buildContainer, buildLogger, systemClock } from './container';
 
 loadDotEnv();
 
@@ -126,7 +126,11 @@ program
   .option('--hours <n>', 'override the lookback window')
   .action(async (opts: { dryRun?: boolean; hours?: string }) => {
     const config = loadConfig();
-    const c = buildContainer(config, systemClock, consoleLogger);
+    const log = buildLogger(config, {
+      level: (process.env.LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error') ?? 'info',
+      runId: runId(),
+    });
+    const c = buildContainer(config, systemClock, log);
 
     const hours = opts.hours ? Number(opts.hours) : config.ingest.lookbackHours;
     const to = systemClock.now();
@@ -197,6 +201,11 @@ program.parseAsync(process.argv).catch((e: unknown) => {
   console.error(e instanceof Error ? e.message : String(e));
   process.exitCode = 1;
 });
+
+/** Correlates every line of one ingest run — the thing you grep for later. */
+function runId(): string {
+  return `${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+}
 
 function mark(ok: boolean): string {
   return ok ? '\u2713' : '\u2717';

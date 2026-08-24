@@ -25,7 +25,16 @@ export class Pipeline {
 
   async run(window: TimeWindow, opts: { dryRun?: boolean } = {}): Promise<RunReport> {
     const sources = this.sources.enabled();
-    const settled = await Promise.allSettled(sources.map((s) => s.collect(window)));
+    this.log.info('ingest started', {
+      sources: sources.map((s) => s.name).join(',') || 'none',
+      from: window.from.toISOString(),
+      to: window.to.toISOString(),
+      dryRun: opts.dryRun === true,
+    });
+
+    const settled = await Promise.allSettled(sources.map(
+      (s) => this.log.time('collect', () => Promise.resolve(s.collect(window)), { source: s.name }),
+    ));
 
     const collected: SourceItem[] = [];
     const failures: SourceFailure[] = [];
@@ -45,6 +54,8 @@ export class Pipeline {
     });
 
     const { fresh, duplicates } = await this.dedupe.filter(collected);
+    this.log.info('deduped', { collected: collected.length, fresh: fresh.length, duplicates });
+
     const created: IssueKey[] = [];
 
     for (const item of fresh) {
@@ -55,10 +66,21 @@ export class Pipeline {
         });
         continue;
       }
-      created.push(await this.tickets.create(draft));
+      const key = await this.tickets.create(draft);
+      this.log.info('created', {
+        issue: key, source: draft.source, priority: draft.priority, due: draft.dueDate,
+      });
+      created.push(key);
     }
 
-    return { collected: collected.length, duplicates, created, failures };
+    const report = { collected: collected.length, duplicates, created, failures };
+    this.log.info('ingest finished', {
+      collected: report.collected,
+      duplicates: report.duplicates,
+      created: report.created.length,
+      failed: failures.length,
+    });
+    return report;
   }
 
   private async toDraft(item: SourceItem): Promise<TicketDraft> {

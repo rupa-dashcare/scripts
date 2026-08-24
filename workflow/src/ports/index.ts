@@ -41,9 +41,17 @@ export interface Clock {
   now(): Date;
 }
 
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
 export interface Logger {
+  debug(msg: string, meta?: Record<string, unknown>): void;
   info(msg: string, meta?: Record<string, unknown>): void;
   warn(msg: string, meta?: Record<string, unknown>): void;
+  error(msg: string, meta?: Record<string, unknown>): void;
+  /** Returns a logger that stamps every line with this extra context. */
+  child(context: Record<string, unknown>): Logger;
+  /** Times an operation and logs its outcome, including on throw. */
+  time<T>(msg: string, fn: () => Promise<T>, meta?: Record<string, unknown>): Promise<T>;
 }
 
 /** A single verifiable fact about the setup, with how to fix it if wrong. */

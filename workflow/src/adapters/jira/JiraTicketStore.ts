@@ -1,4 +1,4 @@
-import type { Checkable, CheckResult, TicketStore } from '../../ports/index';
+import type { Checkable, CheckResult, Logger, TicketStore } from '../../ports/index';
 import type {
   DedupeKey, Issue, IssueKey, IssuePatch, Priority, Status, TicketDraft,
 } from '../../domain/types';
@@ -21,6 +21,7 @@ export interface JiraOptions {
   readonly fieldSourceUrl?: string;
   readonly stagedStatus?: Status;
   readonly fetch?: typeof globalThis.fetch;
+  readonly log?: Logger;
 }
 
 /** Jira Cloud REST v3 over plain fetch — no SDK, so the adapter stays thin. */
@@ -28,10 +29,12 @@ export class JiraTicketStore implements TicketStore, Checkable {
   readonly checkName = 'jira';
   private readonly http: typeof globalThis.fetch;
   private readonly access: ProjectAccess;
+  private readonly log: Logger | undefined;
 
   constructor(private readonly opts: JiraOptions) {
     this.http = opts.fetch ?? globalThis.fetch;
     this.access = opts.access;
+    this.log = opts.log?.child({ component: 'jira' });
   }
 
   /** Convenience for the adapter's own queries and URLs. */
@@ -238,6 +241,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const started = Date.now();
     const res = await this.http(`${this.opts.apiBaseUrl}${path}`, {
       method,
       headers: {
@@ -249,8 +253,16 @@ export class JiraTicketStore implements TicketStore, Checkable {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
+      // Path only — the query string can carry JQL, and the headers carry auth.
+      this.log?.error('request failed', {
+        method, path: pathOnly(path), status: res.status, ms: Date.now() - started,
+        response: text.slice(0, 300),
+      });
       throw new Error(`Jira ${method} ${path} → ${res.status} ${res.statusText} ${text.slice(0, 300)}`);
     }
+    this.log?.debug('request', {
+      method, path: pathOnly(path), status: res.status, ms: Date.now() - started,
+    });
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
@@ -303,6 +315,12 @@ function adf(text: string): unknown {
       content: para.length > 0 ? [{ type: 'text', text: para }] : [],
     })),
   };
+}
+
+/** Drops the query string, which can contain JQL and user content. */
+function pathOnly(path: string): string {
+  const q = path.indexOf('?');
+  return q === -1 ? path : `${path.slice(0, q)}?…`;
 }
 
 function* chunked<T>(items: readonly T[], size: number): Generator<readonly T[]> {

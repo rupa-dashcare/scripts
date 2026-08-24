@@ -113,7 +113,43 @@ export class RecordingNotifier implements Notifier {
   }
 }
 
-export const silentLogger: Logger = { info: () => {}, warn: () => {} };
+export class RecordingLogger implements Logger {
+  readonly lines: { level: string; msg: string; meta?: Record<string, unknown> }[] = [];
+  constructor(private readonly context: Record<string, unknown> = {}) {}
+
+  debug(msg: string, meta?: Record<string, unknown>) { this.push('debug', msg, meta); }
+  info(msg: string, meta?: Record<string, unknown>) { this.push('info', msg, meta); }
+  warn(msg: string, meta?: Record<string, unknown>) { this.push('warn', msg, meta); }
+  error(msg: string, meta?: Record<string, unknown>) { this.push('error', msg, meta); }
+
+  child(context: Record<string, unknown>): Logger {
+    const c = new RecordingLogger({ ...this.context, ...context });
+    // Share the buffer so assertions see child lines too.
+    Object.defineProperty(c, 'lines', { value: this.lines });
+    return c;
+  }
+
+  async time<T>(msg: string, fn: () => Promise<T>, meta?: Record<string, unknown>): Promise<T> {
+    try {
+      const r = await fn();
+      this.push('debug', msg, { ...meta, outcome: 'ok' });
+      return r;
+    } catch (e) {
+      this.push('error', msg, { ...meta, outcome: 'failed', error: e });
+      throw e;
+    }
+  }
+
+  private push(level: string, msg: string, meta?: Record<string, unknown>) {
+    this.lines.push({ level, msg, meta: { ...this.context, ...meta } });
+  }
+}
+
+export const silentLogger: Logger = {
+  debug: () => {}, info: () => {}, warn: () => {}, error: () => {},
+  child: () => silentLogger,
+  time: async <T,>(_m: string, fn: () => Promise<T>) => fn(),
+};
 
 export function item(over: Partial<SourceItem> = {}): SourceItem {
   return {

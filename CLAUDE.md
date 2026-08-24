@@ -41,7 +41,11 @@ npm run wf -- ...  # the CLI: doctor | ingest
    `RUPA`, `PP`, `DL` and `DEV` and nothing else. Every Jira call routes through `ProjectAccess`
    — reads are *wrapped* in a `project IN (...)` clause rather than validated, and write
    keys are checked before any HTTP call. Never add a Jira call that bypasses it.
-7. **The dependency rule** — `domain` imports nothing; `core` imports `domain` + `ports`;
+7. **Nothing reaches a log unredacted.** All logging goes through `StructuredLogger`,
+   which pipes every line through `Redactor` — there is no bypass. Redaction works by
+   registered secret value *and* by credential shape, so an unknown token is still
+   caught. Never `console.log` a request, header, or config object directly.
+8. **The dependency rule** — `domain` imports nothing; `core` imports `domain` + `ports`;
    only `container.ts` imports `adapters`. `npm run arch` enforces it and will fail CI.
 
 ### Adding a source
