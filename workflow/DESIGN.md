@@ -302,8 +302,11 @@ large backlog.
 - Two consequences of it being a *business* project rather than software: its settings live
   under `/jira/core/projects/RUPA/…` (not `/jira/software/…`, which 404s), and team-managed
   projects attach custom fields **per issue type**, so the three fields go on `Task`.
-- **It is currently visible to the whole site** (`isPrivate: false`). Requirement 3 says
-  private, so access needs restricting before anything real lands in it.
+- **It is already private** — access level Private, with me as the only member and sole
+  administrator. Note that the REST API's `isPrivate` flag reads `false` here regardless:
+  it does not track a team-managed project's Open/Limited/Private access level, and there is
+  no supported endpoint that does. `wf doctor` therefore reports access level as an advisory
+  line to eyeball, never as a pass/fail — a check that cannot be trusted is worse than none.
 - `wf setup` prints this checklist with the real URLs; `wf doctor` then verifies every
   item and prints the exact `JIRA_FIELD_*` ids to paste into `.env`.
 - Statuses: `Staged → To Do → In Progress → Done`, plus `Rejected` as a terminal state.

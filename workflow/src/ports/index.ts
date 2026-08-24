@@ -53,6 +53,11 @@ export interface SetupFinding {
   readonly detail: string;
   /** Copy-pasteable or click-by-click remediation. Shown only when ok is false. */
   readonly remedy?: string;
+  /**
+   * Something worth seeing but that we cannot verify, so it never fails the run.
+   * Use this rather than guessing — a check that cries wolf is worse than no check.
+   */
+  readonly advisory?: boolean;
 }
 
 /**

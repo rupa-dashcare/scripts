@@ -44,7 +44,7 @@ export class JiraDoctor implements SetupInspector {
   async inspect(): Promise<readonly SetupFinding[]> {
     const findings: SetupFinding[] = [];
 
-    findings.push(await this.checkProject());
+    findings.push(...(await this.checkProject()));
     findings.push(await this.checkIssueType());
     findings.push(await this.checkStatuses());
     findings.push(...(await this.checkFields()));
@@ -52,30 +52,34 @@ export class JiraDoctor implements SetupInspector {
     return findings;
   }
 
-  private async checkProject(): Promise<SetupFinding> {
+  private async checkProject(): Promise<readonly SetupFinding[]> {
     try {
       const p = await this.api.projectInfo();
       this.projectType = p.projectTypeKey;
-      if (!p.isPrivate) {
-        return {
-          name: 'project is private',
-          ok: false,
-          detail: `"${p.name}" is visible to the whole site`,
-          remedy: `${this.settings(p.projectTypeKey, 'access')} — set access to Private`,
-        };
-      }
-      return {
-        name: 'project is private',
-        ok: true,
-        detail: `"${p.name}" (${p.style}, ${p.projectTypeKey})`,
-      };
+      return [
+        {
+          name: 'project',
+          ok: true,
+          detail: `"${p.name}" (${p.style}, ${p.projectTypeKey})`,
+        },
+        {
+          // The REST API's isPrivate flag does NOT track a team-managed project's
+          // Open/Limited/Private access level — RUPA reads false while the UI shows
+          // Private. There is no supported endpoint for the real value, so this is
+          // reported as something to eyeball, never as a failure.
+          name: 'access level',
+          ok: true,
+          advisory: true,
+          detail: `not exposed by the API — confirm at ${this.settings(p.projectTypeKey, 'access')}`,
+        },
+      ];
     } catch (e) {
-      return {
-        name: 'project exists',
+      return [{
+        name: 'project',
         ok: false,
         detail: msg(e),
         remedy: `Create a private team-managed project with key ${this.projectKey} at ${this.siteUrl}/jira/projects?create=true`,
-      };
+      }];
     }
   }
 

@@ -40,11 +40,12 @@ program
     if (failed === 0) {
       console.log('\n  project setup');
       for (const f of await c.setup.inspect()) {
-        if (!f.ok) {
+        if (!f.ok && !f.advisory) {
           failed += 1;
           if (f.remedy) remedies.push(`${f.name}\n      ${f.remedy}`);
         }
-        console.log(`    ${mark(f.ok)} ${f.name.padEnd(18)} ${f.detail}`);
+        const glyph = f.advisory ? '\u00b7' : mark(f.ok);
+        console.log(`    ${glyph} ${f.name.padEnd(18)} ${f.detail}`);
       }
     }
 
@@ -76,13 +77,13 @@ program
     // RUPA is a team-managed *business* project, so settings live under /jira/core.
     const settings = `${site}/jira/core/projects/${key}/settings`;
     console.log(`
-  One-time Jira setup. The project already exists — ${key} ("To Do's") — so this
-  is three edits, not a creation. None of it is reachable through the API without
-  site-admin rights, so it is a browser job. See DESIGN.md §6.
+  One-time Jira setup. The project already exists and is already private, so this
+  is two edits. Neither is reachable through the API without site-admin rights,
+  so it is a browser job. See DESIGN.md §6.
 
-  1. Make it private
+  1. Access — already Private, nothing to do
      ${settings}/access
-     It is currently visible to the whole site.
+     (The API cannot read this back, so doctor only ever links to it.)
 
   2. Add the workflow statuses
      ${settings}/workflows

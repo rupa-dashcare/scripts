@@ -53,29 +53,39 @@ describe('JiraDoctor', () => {
     expect(findings.every((f) => f.ok)).toBe(true);
   });
 
-  it('flags a project that is not private', async () => {
-    const findings = await inspect(api({
-      project: { name: "To Do's", isPrivate: false, style: 'next-gen', projectTypeKey: 'business' },
-    }));
-    const f = findings.find((x) => x.name === 'project is private');
-    expect(f?.ok).toBe(false);
-    expect(f?.remedy).toContain('/settings/access');
-    // business projects live under /jira/core — /jira/software 404s
-    expect(f?.remedy).toContain('/jira/core/projects/RUPA/');
-    expect(f?.remedy).not.toContain('/jira/software/');
+  // The API's isPrivate does not track a team-managed project's access level:
+  // RUPA reads false while the UI shows Private. Reporting that as a failure
+  // would cry wolf forever, so it is advisory only.
+  it('never fails on access level, whatever isPrivate says', async () => {
+    for (const isPrivate of [true, false]) {
+      const findings = await inspect(api({
+        project: { name: "To Do's", isPrivate, style: 'next-gen', projectTypeKey: 'business' },
+      }));
+      const f = findings.find((x) => x.name === 'access level');
+      expect(f?.advisory).toBe(true);
+      expect(f?.ok).toBe(true);
+      expect(findings.every((x) => x.ok)).toBe(true);
+    }
+  });
+
+  it('points a business project at /jira/core for access', async () => {
+    const findings = await inspect(api());
+    const f = findings.find((x) => x.name === 'access level');
+    expect(f?.detail).toContain('/jira/core/projects/RUPA/settings/access');
+    expect(f?.detail).not.toContain('/jira/software/');
   });
 
   it('points a software project at /jira/software instead', async () => {
     const findings = await inspect(api({
       project: { name: 'Web App', isPrivate: false, style: 'classic', projectTypeKey: 'software' },
     }));
-    const f = findings.find((x) => x.name === 'project is private');
-    expect(f?.remedy).toContain('/jira/software/projects/RUPA/');
+    const f = findings.find((x) => x.name === 'access level');
+    expect(f?.detail).toContain('/jira/software/projects/RUPA/');
   });
 
   it('tells you how to create a missing project', async () => {
     const findings = await inspect(api({ project: new Error('404 Not Found') }));
-    const f = findings.find((x) => x.name === 'project exists');
+    const f = findings.find((x) => x.name === 'project');
     expect(f?.ok).toBe(false);
     expect(f?.remedy).toContain('RUPA');
   });
