@@ -1,8 +1,11 @@
 name: ingest
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
+  # Paused until setup is complete. With no secrets set, every run fails on
+  # config validation — a red X every 5 minutes teaches you to ignore the tab,
+  # which is worse than not running at all. Re-enable once `wf doctor` is green.
+  # schedule:
+  #   - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:
