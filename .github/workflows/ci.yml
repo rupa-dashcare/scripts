@@ -10,6 +10,19 @@ defaults:
     working-directory: workflow
 
 jobs:
+  # Runs even if the local hook was bypassed or never installed.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # gitleaks needs history to scan it
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
   check:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,58 @@
+# Secret scanning for this repo.
+#
+# Runs in three places, deliberately overlapping:
+#   1. pre-commit  — catches it before it is even committed
+#   2. CI          — catches it if the hook was bypassed or not installed
+#   3. GitHub push protection — the backstop, already proven to work
+#
+# Note there is NO allowlist for the test fixtures. The synthetic credentials in
+# test/redact.test.ts are assembled at runtime precisely so they do not need one:
+# an allowlisted file is a blind spot, and a real secret pasted there later would
+# sail through.
+
+title = "workflow secret scanning"
+
+[extend]
+useDefault = true
+
+# ── Credentials this system actually handles ─────────────────────────────
+# The default ruleset misses several of these, and they are exactly the ones
+# most likely to end up in a log line, a fixture, or a pasted debug snippet.
+
+[[rules]]
+id = "atlassian-api-token"
+description = "Atlassian API token"
+regex = '''ATATT3x[A-Za-z0-9_\-=+/]{40,}'''
+keywords = ["ATATT3x"]
+
+[[rules]]
+id = "granola-api-key"
+description = "Granola API key"
+regex = '''\bgrn_[A-Za-z0-9_\-]{16,}'''
+keywords = ["grn_"]
+
+[[rules]]
+id = "cloudflare-api-token"
+description = "Cloudflare API token"
+regex = '''(?i)\bCF_API_TOKEN\s*[:=]\s*['"]?[A-Za-z0-9_\-]{30,}'''
+keywords = ["cf_api_token"]
+
+[[rules]]
+id = "jira-basic-auth-header"
+description = "Base64 Basic auth header"
+regex = '''(?i)authorization\s*[:=]\s*['"]?Basic\s+[A-Za-z0-9+/]{24,}={0,2}'''
+keywords = ["authorization", "basic"]
+
+[[rules]]
+id = "google-oauth-refresh-token"
+description = "Google OAuth refresh token"
+regex = '''\b1//0[A-Za-z0-9_\-]{30,}'''
+keywords = ["1//0"]
+
+[allowlist]
+description = "Paths that cannot contain project secrets"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)\.gitleaks\.toml$''',
+]

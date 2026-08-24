@@ -1,18 +1,36 @@
 #!/usr/bin/env sh
-# DESIGN.md §8 — extending the system must not silently break it.
+# DESIGN.md §8 — extending the system must not silently break it,
+# and §7.5 — no credential may reach a commit.
 set -e
 
-# Only run the suite when workflow/ actually changed.
+# Git hooks run with a minimal PATH; Homebrew's bin is usually absent.
+case ":$PATH:" in
+  *":/opt/homebrew/bin:"*) ;;
+  *) PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" ;;
+esac
+export PATH
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# ── Secrets first. A failing test wastes a minute; a leaked token does not. ──
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "› gitleaks"
+  gitleaks git "$REPO_ROOT" \
+    --staged \
+    --no-banner \
+    --redact \
+    --config "$REPO_ROOT/.gitleaks.toml"
+else
+  echo "✗ gitleaks is not installed — refusing to commit."
+  echo "  brew install gitleaks"
+  echo "  (or SKIP_GITLEAKS=1 git commit ... if you are certain)"
+  [ "$SKIP_GITLEAKS" = "1" ] || exit 1
+fi
+
+# ── Then the suite, but only when workflow/ actually changed. ──
 if git diff --cached --name-only | grep -q '^workflow/'; then
-  cd workflow
+  cd "$REPO_ROOT/workflow"
   echo "› typecheck"    && npm run --silent typecheck
   echo "› architecture" && npm run --silent arch
   echo "› tests"        && npm run --silent test
-fi
-
-# Never let a credential reach a commit.
-if command -v gitleaks >/dev/null 2>&1; then
-  echo "› gitleaks" && gitleaks protect --staged --no-banner --redact
-else
-  echo "› gitleaks not installed — skipping (brew install gitleaks)"
 fi
