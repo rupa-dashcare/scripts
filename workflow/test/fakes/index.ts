@@ -41,6 +41,7 @@ export class InMemoryTicketStore implements TicketStore {
       priority: draft.priority,
       dueDate: draft.dueDate,
       labels: [...draft.labels],
+      updated: new Date('2026-08-24T00:00:00Z'),
     });
     return key;
   }

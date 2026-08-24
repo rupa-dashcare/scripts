@@ -4,6 +4,7 @@
  */
 import { JiraDoctor } from './adapters/jira/JiraDoctor';
 import { JiraTicketStore } from './adapters/jira/JiraTicketStore';
+import { JiraUpstreamSource } from './adapters/jira/JiraUpstreamSource';
 import { KvCredentialStore } from './adapters/cloudflare/KvCredentialStore';
 import { SlackSource } from './adapters/slack/SlackSource';
 import { ProjectAccess } from './domain/ProjectAccess';
@@ -75,6 +76,17 @@ export function buildContainer(
     : null;
   if (slack) sources.register(slack);
 
+  // Mirrors issues assigned to me in the read-only projects. Registered only
+  // when there is somewhere to mirror from.
+  const upstream = access.mirrorKeys.length > 0
+    ? new JiraUpstreamSource({
+        tickets: jira,
+        access,
+        siteUrl: config.jira.baseUrl.replace(/\/+$/, ''),
+      })
+    : null;
+  if (upstream) sources.register(upstream);
+
   const pipeline = new Pipeline(
     sources,
     new Dedupe(jira),
@@ -87,6 +99,7 @@ export function buildContainer(
 
   const checks: Checkable[] = [jira];
   if (slack) checks.push(slack);
+  if (upstream) checks.push(upstream);
   if (kv) checks.push(kv);
 
   const setup = new JiraDoctor(

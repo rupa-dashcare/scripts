@@ -28,6 +28,20 @@ export class StatedDueDate implements TriageRule {
   }
 }
 
+/** A mirrored Jira issue inherits its upstream triage — §5. */
+export class InheritUpstream implements TriageRule {
+  readonly id = 'inherit-upstream';
+  matches(item: SourceItem): boolean {
+    return item.source === 'jira' && item.hints.upstreamPriority !== undefined;
+  }
+  apply(item: SourceItem): TriageOutcome {
+    const out: TriageOutcome = { priority: item.hints.upstreamPriority };
+    return item.hints.upstreamDueDate
+      ? { ...out, dueDate: item.hints.upstreamDueDate }
+      : out;
+  }
+}
+
 export class SlackIncidentChannel implements TriageRule {
   readonly id = 'slack-incident-channel';
   constructor(private readonly channels: readonly string[]) {}
@@ -80,6 +94,7 @@ export class SourceDefault implements TriageRule {
 export function defaultRules(incidentChannels: readonly string[] = []): readonly TriageRule[] {
   return [
     new StatedDueDate(),
+    new InheritUpstream(),
     new SlackIncidentChannel(incidentChannels),
     new VipSender(),
     new KeywordEscalation(),

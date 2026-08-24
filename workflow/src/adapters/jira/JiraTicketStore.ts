@@ -88,7 +88,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
     for (;;) {
       const page = await this.request<JiraSearch>('POST', '/rest/api/3/search', {
         jql, startAt, maxResults: 100,
-        fields: ['summary', 'status', 'priority', 'duedate', 'labels'],
+        fields: ['summary', 'status', 'priority', 'duedate', 'labels', 'updated'],
       });
       for (const i of page.issues ?? []) {
         out.push({
@@ -98,6 +98,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
           priority: (i.fields.priority?.name ?? 'Medium') as Priority,
           dueDate: i.fields.duedate ?? null,
           labels: i.fields.labels ?? [],
+          updated: i.fields.updated ? new Date(i.fields.updated) : null,
         });
       }
       startAt += page.maxResults ?? 100;
@@ -226,7 +227,7 @@ export interface ProjectInfo {
 interface JiraSearch {
   issues?: { key: string; fields: {
     summary?: string; status?: { name?: string }; priority?: { name?: string };
-    duedate?: string | null; labels?: string[];
+    duedate?: string | null; labels?: string[]; updated?: string;
   } }[];
   total?: number;
   maxResults?: number;

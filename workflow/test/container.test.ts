@@ -21,9 +21,28 @@ function container(env: NodeJS.ProcessEnv) {
   return buildContainer(loadConfig(env), new FakeClock('2026-08-24T00:00:00Z'), silentLogger);
 }
 
+const WITH_READS = { ...BASE, JIRA_READ_PROJECT_KEYS: 'PP,DL,DEV' } as NodeJS.ProcessEnv;
+
 describe('container', () => {
-  it('registers no sources when Slack is unconfigured', () => {
+  it('registers no sources when nothing is configured', () => {
     expect(container(BASE).sources.size).toBe(0);
+  });
+
+  it('registers the mirror source once read-only projects exist', () => {
+    const c = container(WITH_READS);
+    expect(c.sources.enabled().map((s) => s.name)).toEqual(['jira']);
+    expect(c.access.mirrorKeys).toEqual(['PP', 'DL', 'DEV']);
+  });
+
+  it('does not register the mirror when there is nowhere to mirror from', () => {
+    expect(container(BASE).access.mirrorKeys).toEqual([]);
+    expect(container(BASE).sources.enabled().map((s) => s.name)).not.toContain('jira');
+  });
+
+  it('runs Slack and the mirror together', () => {
+    const both = { ...WITH_SLACK, JIRA_READ_PROJECT_KEYS: 'PP,DL,DEV' } as NodeJS.ProcessEnv;
+    expect(container(both).sources.enabled().map((s) => s.name).sort())
+      .toEqual(['jira', 'slack']);
   });
 
   it('registers Slack once its three values are present', () => {
@@ -40,6 +59,8 @@ describe('container', () => {
   it('adds Slack to the doctor checks only when registered', () => {
     expect(container(BASE).checks.map((c) => c.checkName)).toEqual(['jira']);
     expect(container(WITH_SLACK).checks.map((c) => c.checkName)).toEqual(['jira', 'slack']);
+    expect(container(WITH_READS).checks.map((c) => c.checkName))
+      .toEqual(['jira', 'jira-upstream']);
   });
 
   it('leaves the credential store null until Cloudflare is configured', () => {

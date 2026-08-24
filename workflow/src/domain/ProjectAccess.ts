@@ -37,6 +37,14 @@ export class ProjectAccess {
     this.readPattern = new RegExp(`^(${this.readable.join('|')})-\\d+$`);
   }
 
+  /**
+   * Projects that may be mirrored: readable but not writable. Excluding the
+   * write project is what stops the mirror source consuming its own output.
+   */
+  get mirrorKeys(): readonly string[] {
+    return this.readable.filter((k) => k !== this.writeKey);
+  }
+
   /** Confines a read to the readable set. */
   confineRead(jql: string): string {
     const list = this.readable.map((k) => `"${k}"`).join(', ');

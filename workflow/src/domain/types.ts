@@ -20,6 +20,11 @@ export interface TriageHints {
   readonly attendees?: readonly string[];
   /** A date the source itself stated, e.g. "by Friday" in a meeting action item. */
   readonly statedDueDate?: string;
+  /** Set only for mirrored Jira issues, so triage can inherit rather than invent. */
+  readonly upstreamPriority?: Priority;
+  readonly upstreamDueDate?: string | null;
+  readonly upstreamStatus?: string;
+  readonly upstreamKey?: string;
 }
 
 /** What every adapter produces. The pipeline knows nothing else about a source. */
@@ -69,6 +74,7 @@ export interface Issue {
   readonly priority: Priority;
   readonly dueDate: string | null;
   readonly labels: readonly string[];
+  readonly updated: Date | null;
 }
 
 export interface IssuePatch {

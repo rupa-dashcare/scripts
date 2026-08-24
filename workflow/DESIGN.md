@@ -109,7 +109,7 @@ interface SourceItem {
 | **Email — Microsoft 365 / Outlook** | MS Graph — see §3.1 | Outlook **category** `→jira`, or a dedicated mail folder | Categories are the Gmail-label analogue (`message.categories` on Graph). Whether Superhuman surfaces categories on an Outlook account is **untested** — the folder trigger is the guaranteed fallback. |
 | **Google Drive** | Drive API | Comment @-mentioning me, or a file landing in a watch folder | `comments.list` per changed file; `changes.list` with a page token for the folder watch. |
 | **Calendar** | Google Calendar API and/or Graph `Calendars.Read` | Event title/description matches a configured pattern | If the M365 account holds the real calendar, it comes free from the same Graph app registration. |
-| **Other Jira projects** | Same Jira API token | Issue assigned to me outside `RUPA` | Creates a linked mirror, not a copy. |
+| **Other Jira projects** | Same Jira API token | Issue assigned to me in `PP`, `DL` or `DEV`, not finished, touched inside the window | Creates a **linked mirror, not a copy** — a pointer carrying the upstream's priority and due date. The upstream stays the source of truth and is never written to; §6.5 makes that structural. The mirror never reads `RUPA`, so the queue cannot consume its own output. |
 
 **Superhuman has no public API**, and does not need one: it is a client over Gmail and
 Outlook, so polling those directly sees everything Superhuman sees.
@@ -279,6 +279,14 @@ approving in bulk is an ordinary `bulk_transition`.
 
 **Everything else in the project can ignore it:** boards, filters and reports carry
 `status != Staged` and behave as though the queue were external.
+
+### A mirror can go stale
+
+If an upstream issue is closed or reassigned after it has been mirrored, the `RUPA` mirror
+does not notice — the pipeline only ever creates. That is a deliberate limitation for now:
+closing the loop would mean writing to `RUPA` on a schedule based on upstream state, which is
+a reconciliation job rather than an ingest. A routine that flags mirrors whose upstream is no
+longer assigned to me belongs in Phase 4.
 
 ### The real risk is rot
 
@@ -633,7 +641,7 @@ problems will otherwise dominate all early debugging.
 |---|---|---|
 | **0** ✅ | Skeleton, CI, Jira client, `wf doctor`, Jira project + fields created | Nothing works until credentials do |
 | **1** ✅ | **Slack `:ticket:` → Jira `Staged`**, end to end, plus `wf stage review` | One vertical slice proves the whole loop, gives me a working review path with no server, *and* stands up the Slack app needed in Phase 3 |
-| **2** | Granola, Gmail ×N, **M365/Outlook via Graph**, Drive, Calendar, Jira mirror | Each is now just an adapter + fixtures. Graph is the long pole — do it first in this phase, and stand up §4.1's store alongside it. |
+| **2** | Granola, Gmail ×N, **M365/Outlook via Graph**, Drive, Calendar. *(Jira mirror already done.)* | Each is now just an adapter + fixtures. Graph is the long pole — do it first in this phase, and stand up §4.1's store alongside it. |
 | **3** | Fly machine, Socket Mode agent, typed ops, dry-run/confirm | First time a server is actually required. **Reconsider the host here:** once this machine exists, moving cron onto it removes both the 60-day cliff and the two-writer rotation problem outright. |
 | **4** | Routines + PR-authoring from Slack | Needs the agent to exist first |
 
