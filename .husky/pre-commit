@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# DESIGN.md §8 — extending the system must not silently break it.
+set -e
+
+# Only run the suite when workflow/ actually changed.
+if git diff --cached --name-only | grep -q '^workflow/'; then
+  cd workflow
+  echo "› typecheck"    && npm run --silent typecheck
+  echo "› architecture" && npm run --silent arch
+  echo "› tests"        && npm run --silent test
+fi
+
+# Never let a credential reach a commit.
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "› gitleaks" && gitleaks protect --staged --no-banner --redact
+else
+  echo "› gitleaks not installed — skipping (brew install gitleaks)"
+fi

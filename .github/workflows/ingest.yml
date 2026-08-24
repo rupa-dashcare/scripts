@@ -1,0 +1,47 @@
+name: ingest
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print what would be created, change nothing'
+        type: boolean
+        default: false
+
+# Two runs must never rotate the same refresh token at once — DESIGN.md §3.2.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: workflow
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: workflow/package-lock.json
+      - run: npm ci --omit=dev
+      - name: ingest
+        run: npm run wf -- ingest ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+          JIRA_FIELD_SOURCE: ${{ secrets.JIRA_FIELD_SOURCE }}
+          JIRA_FIELD_SOURCE_KEY: ${{ secrets.JIRA_FIELD_SOURCE_KEY }}
+          JIRA_FIELD_SOURCE_URL: ${{ secrets.JIRA_FIELD_SOURCE_URL }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          INCIDENT_CHANNELS: ${{ vars.INCIDENT_CHANNELS }}

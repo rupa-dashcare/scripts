@@ -1,0 +1,26 @@
+# GitHub disables scheduled workflows after 60 days with no COMMIT activity,
+# which would silently kill ingest. Only pushes reset the timer — not issues,
+# PRs or releases. See DESIGN.md §2.
+name: keepalive
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'   # 06:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: push a timestamp commit
+        run: |
+          date -u +'%Y-%m-%dT%H:%M:%SZ' > .keepalive
+          git config user.name  'workflow-keepalive'
+          git config user.email 'noreply@github.com'
+          git add .keepalive
+          git commit -m 'chore: keepalive — keep scheduled workflows enabled'
+          git push

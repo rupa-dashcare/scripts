@@ -1,0 +1,40 @@
+{
+  "name": "workflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "wf": "./src/cli.ts"
+  },
+  "scripts": {
+    "wf": "tsx src/cli.ts",
+    "doctor": "tsx src/cli.ts doctor",
+    "ingest": "tsx src/cli.ts ingest",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "arch": "depcruise src --config .dependency-cruiser.cjs",
+    "check": "npm run typecheck && npm run arch && npm run test"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "dependency-cruiser": "^16.3.3",
+    "husky": "^9.1.4",
+    "lint-staged": "^15.2.7",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "lint-staged": {
+    "workflow/**/*.ts": [
+      "bash -c 'cd workflow && npm run typecheck'"
+    ]
+  }
+}
