@@ -144,9 +144,32 @@ export class JiraTicketStore implements TicketStore, Checkable {
     }
   }
 
-  /** Discovers custom field ids so .env can be filled in — `wf doctor --fields`. */
+  /** Discovers custom field ids so .env can be filled in — `wf doctor`. */
   async listFields(): Promise<readonly { id: string; name: string }[]> {
     return this.request<{ id: string; name: string }[]>('GET', '/rest/api/3/field');
+  }
+
+  async projectInfo(): Promise<{ name: string; isPrivate: boolean; style: string }> {
+    const p = await this.request<{ name: string; isPrivate?: boolean; style?: string }>(
+      'GET', `/rest/api/3/project/${this.opts.projectKey}`,
+    );
+    return { name: p.name, isPrivate: p.isPrivate === true, style: p.style ?? 'classic' };
+  }
+
+  async projectStatuses(): Promise<readonly { issueType: string; statuses: readonly string[] }[]> {
+    const raw = await this.request<{ name: string; statuses: { name: string }[] }[]>(
+      'GET', `/rest/api/3/project/${this.opts.projectKey}/statuses`,
+    );
+    return raw.map((t) => ({ issueType: t.name, statuses: t.statuses.map((s) => s.name) }));
+  }
+
+  /** Issue types this account may actually create in the project. */
+  async createMeta(): Promise<readonly string[]> {
+    const meta = await this.request<{ projects?: { issuetypes?: { name: string }[] }[] }>(
+      'GET',
+      `/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(this.opts.projectKey)}`,
+    );
+    return meta.projects?.[0]?.issuetypes?.map((t) => t.name) ?? [];
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

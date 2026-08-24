@@ -46,6 +46,23 @@ export interface Logger {
   warn(msg: string, meta?: Record<string, unknown>): void;
 }
 
+/** A single verifiable fact about the setup, with how to fix it if wrong. */
+export interface SetupFinding {
+  readonly name: string;
+  readonly ok: boolean;
+  readonly detail: string;
+  /** Copy-pasteable or click-by-click remediation. Shown only when ok is false. */
+  readonly remedy?: string;
+}
+
+/**
+ * Deeper than Checkable: verifies the project is actually shaped the way the
+ * pipeline needs (statuses, fields, issue type, create permission).
+ */
+export interface SetupInspector {
+  inspect(): Promise<readonly SetupFinding[]>;
+}
+
 /** Health probe used by `wf doctor`. Every adapter implements one. */
 export interface Checkable {
   readonly checkName: string;

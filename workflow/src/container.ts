@@ -2,6 +2,7 @@
  * Composition root (§11.7). The ONLY file allowed to construct adapters —
  * dependency-cruiser fails the build if anything else imports src/adapters.
  */
+import { JiraDoctor } from './adapters/jira/JiraDoctor';
 import { JiraTicketStore } from './adapters/jira/JiraTicketStore';
 import { KvCredentialStore } from './adapters/cloudflare/KvCredentialStore';
 import { Dedupe } from './core/Dedupe';
@@ -10,7 +11,9 @@ import { Pipeline } from './core/Pipeline';
 import { SourceRegistry } from './core/SourceRegistry';
 import { TriageRules } from './core/TriageRules';
 import { defaultRules } from './core/rules/index';
-import type { Checkable, Clock, CredentialStore, Logger, TicketStore } from './ports/index';
+import type {
+  Checkable, Clock, CredentialStore, Logger, SetupInspector, TicketStore,
+} from './ports/index';
 import type { Config } from './config';
 
 export interface Container {
@@ -20,6 +23,7 @@ export interface Container {
   readonly pipeline: Pipeline;
   readonly sources: SourceRegistry;
   readonly checks: readonly Checkable[];
+  readonly setup: SetupInspector;
 }
 
 export const systemClock: Clock = { now: () => new Date() };
@@ -68,7 +72,18 @@ export function buildContainer(
   const checks: Checkable[] = [jira];
   if (kv) checks.push(kv);
 
-  return { config, tickets: jira, credentials: kv, pipeline, sources, checks };
+  const setup = new JiraDoctor(
+    jira,
+    config.jira.projectKey,
+    {
+      JIRA_FIELD_SOURCE: config.jira.fieldSource,
+      JIRA_FIELD_SOURCE_KEY: config.jira.fieldSourceKey,
+      JIRA_FIELD_SOURCE_URL: config.jira.fieldSourceUrl,
+    },
+    config.jira.baseUrl.replace(/\/+$/, ''),
+  );
+
+  return { config, tickets: jira, credentials: kv, pipeline, sources, checks, setup };
 }
 
 function fmt(meta: Record<string, unknown>): string {

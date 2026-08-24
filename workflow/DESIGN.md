@@ -296,7 +296,12 @@ large backlog.
 
 ### Jira setup (manual, one time)
 
-- Private project, key `INBOX`, permission scheme limited to me.
+- Private **team-managed** project, key `INBOX`. Team-managed matters: it lets me edit
+  statuses and custom fields myself, whereas a company-managed project needs a Jira admin
+  for every one of these steps. The site is `casedrive.atlassian.net`; none of the six
+  existing projects are private, so this one is new.
+- `wf setup` prints this checklist with the real URLs; `wf doctor` then verifies every
+  item and prints the exact `JIRA_FIELD_*` ids to paste into `.env`.
 - Statuses: `Staged → To Do → In Progress → Done`, plus `Rejected` as a terminal state.
 - Custom fields: `Source` (select), `Source Key` (short text), `Source URL` (url).
 - A remote issue link back to the original, so "view original" is one click.

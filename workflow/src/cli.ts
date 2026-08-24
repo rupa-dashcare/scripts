@@ -11,46 +11,106 @@ program.name('wf').description('Personal workflow system — signal to ticket').
 
 program
   .command('doctor')
-  .description('verify every credential and print what is reachable')
-  .option('--fields', 'list Jira custom field ids, to fill in .env')
+  .description('verify every credential and that Jira is shaped correctly')
+  .option('--fields', 'list every Jira custom field id')
   .action(async (opts: { fields?: boolean }) => {
     const config = loadConfig();
     const c = buildContainer(config);
 
-    console.log(`\n  project   ${config.jira.projectKey} @ ${config.jira.baseUrl}`);
+    console.log(`\n  site      ${config.jira.baseUrl}`);
+    console.log(`  project   ${config.jira.projectKey}`);
+    console.log(`  as        ${config.jira.email}`);
     console.log(`  lookback  ${config.ingest.lookbackHours}h`);
     console.log(`  sources   ${c.sources.size} registered\n`);
 
+    const remedies: string[] = [];
     let failed = 0;
+
+    console.log('  connectivity');
     for (const check of c.checks) {
       const r = await check.check();
       if (!r.ok) failed += 1;
-      console.log(`  ${r.ok ? '✓' : '✗'} ${check.checkName.padEnd(16)} ${r.detail}`);
+      console.log(`    ${mark(r.ok)} ${check.checkName.padEnd(18)} ${r.detail}`);
     }
-
-    for (const [label, value] of [
-      ['Source field', config.jira.fieldSource],
-      ['Source Key field', config.jira.fieldSourceKey],
-      ['Source URL field', config.jira.fieldSourceUrl],
-    ] as const) {
-      if (!value) console.log(`  · ${label} not configured — run \`wf doctor --fields\``);
-    }
-
     if (!c.credentials) {
-      console.log('  · cloudflare-kv    not configured (needed from Phase 2)');
+      console.log('    · cloudflare-kv      not configured (first needed in Phase 2)');
+    }
+
+    // Project shape is only meaningful once Jira is actually reachable.
+    if (failed === 0) {
+      console.log('\n  project setup');
+      for (const f of await c.setup.inspect()) {
+        if (!f.ok) {
+          failed += 1;
+          if (f.remedy) remedies.push(`${f.name}\n      ${f.remedy}`);
+        }
+        console.log(`    ${mark(f.ok)} ${f.name.padEnd(18)} ${f.detail}`);
+      }
+    }
+
+    if (remedies.length > 0) {
+      console.log('\n  to fix');
+      for (const r of remedies) console.log(`    · ${r}`);
     }
 
     if (opts.fields) {
       const jira = c.tickets as { listFields?: () => Promise<readonly { id: string; name: string }[]> };
       const fields = (await jira.listFields?.()) ?? [];
-      console.log('\n  custom fields:');
+      console.log('\n  custom fields');
       for (const f of fields.filter((f) => f.id.startsWith('customfield_'))) {
         console.log(`    ${f.id.padEnd(24)} ${f.name}`);
       }
     }
 
-    console.log('');
+    console.log(failed === 0 ? '\n  all green\n' : `\n  ${failed} problem(s)\n`);
     process.exitCode = failed > 0 ? 1 : 0;
+  });
+
+program
+  .command('setup')
+  .description('print the one-time manual Jira checklist')
+  .action(() => {
+    const config = loadConfig();
+    const site = config.jira.baseUrl.replace(/\/+$/, '');
+    const key = config.jira.projectKey;
+    console.log(`
+  One-time Jira setup — none of this can be done through the API without
+  site-admin rights, so it is a browser job. See DESIGN.md §6.
+
+  1. Create the project
+     ${site}/jira/projects?create=true
+     · Type:  Team-managed  (lets you edit statuses and fields yourself,
+              with no Jira admin involved — a company-managed project
+              would need an admin for every step below)
+     · Key:   ${key}
+     · Access: Private
+
+  2. Add the workflow statuses
+     ${site}/jira/software/projects/${key}/settings/workflow
+     Staged → To Do → In Progress → Done, plus Rejected as a terminal state.
+     New issues must land in Staged.
+
+  3. Add three custom fields
+     ${site}/jira/software/projects/${key}/settings/fields
+     · Source      — short text
+     · Source Key  — short text
+     · Source URL  — URL
+
+  4. Mint an API token
+     https://id.atlassian.com/manage-profile/security/api-tokens
+
+  5. Fill in .env, then run:  npm run wf -- doctor
+     doctor prints the exact JIRA_FIELD_* ids once the fields exist.
+
+  6. Push the same values as GitHub secrets:
+     gh secret set JIRA_BASE_URL --body '${site}'
+     gh secret set JIRA_EMAIL --body '${config.jira.email}'
+     gh secret set JIRA_API_TOKEN        # prompts, so it stays out of shell history
+     gh secret set JIRA_PROJECT_KEY --body '${key}'
+     gh secret set JIRA_FIELD_SOURCE --body '<from doctor>'
+     gh secret set JIRA_FIELD_SOURCE_KEY --body '<from doctor>'
+     gh secret set JIRA_FIELD_SOURCE_URL --body '<from doctor>'
+`);
   });
 
 program
@@ -83,6 +143,10 @@ program.parseAsync(process.argv).catch((e: unknown) => {
   console.error(e instanceof Error ? e.message : String(e));
   process.exitCode = 1;
 });
+
+function mark(ok: boolean): string {
+  return ok ? '\u2713' : '\u2717';
+}
 
 /** Minimal .env loader — avoids a dependency for four lines of parsing. */
 function loadDotEnv(path = '.env'): void {
