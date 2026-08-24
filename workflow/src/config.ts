@@ -15,6 +15,12 @@ const Schema = z.object({
     namespaceId: z.string().optional(),
     apiToken: z.string().optional(),
   }),
+  slack: z.object({
+    token: z.string().optional(),
+    userId: z.string().optional(),
+    teamId: z.string().optional(),
+    triggerEmoji: z.string().default('ticket'),
+  }),
   ingest: z.object({
     lookbackHours: z.coerce.number().int().positive().default(48),
     incidentChannels: z.array(z.string()).default([]),
@@ -38,6 +44,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       accountId: env.CF_ACCOUNT_ID,
       namespaceId: env.CF_KV_NAMESPACE_ID,
       apiToken: env.CF_API_TOKEN,
+    },
+    slack: {
+      token: env.SLACK_USER_TOKEN,
+      userId: env.SLACK_USER_ID,
+      teamId: env.SLACK_TEAM_ID,
+      triggerEmoji: env.SLACK_TRIGGER_EMOJI ?? 'ticket',
     },
     ingest: {
       lookbackHours: env.LOOKBACK_HOURS ?? 48,

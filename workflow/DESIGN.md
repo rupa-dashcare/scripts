@@ -578,8 +578,8 @@ problems will otherwise dominate all early debugging.
 
 | Phase | Deliverable | Why this order |
 |---|---|---|
-| **0** | Skeleton, CI, Jira client, `wf doctor`, Jira project + fields created | Nothing works until credentials do |
-| **1** | **Slack `:ticket:` → Jira `Staged`**, end to end, plus `wf stage review` | One vertical slice proves the whole loop, gives me a working review path with no server, *and* stands up the Slack app needed in Phase 3 |
+| **0** ✅ | Skeleton, CI, Jira client, `wf doctor`, Jira project + fields created | Nothing works until credentials do |
+| **1** ✅ | **Slack `:ticket:` → Jira `Staged`**, end to end, plus `wf stage review` | One vertical slice proves the whole loop, gives me a working review path with no server, *and* stands up the Slack app needed in Phase 3 |
 | **2** | Granola, Gmail ×N, **M365/Outlook via Graph**, Drive, Calendar, Jira mirror | Each is now just an adapter + fixtures. Graph is the long pole — do it first in this phase, and stand up §4.1's store alongside it. |
 | **3** | Fly machine, Socket Mode agent, typed ops, dry-run/confirm | First time a server is actually required. **Reconsider the host here:** once this machine exists, moving cron onto it removes both the 60-day cliff and the two-writer rotation problem outright. |
 | **4** | Routines + PR-authoring from Slack | Needs the agent to exist first |

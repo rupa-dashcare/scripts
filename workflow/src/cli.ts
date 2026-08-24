@@ -139,6 +139,54 @@ program
     process.exitCode = report.failures.length > 0 && report.collected === 0 ? 1 : 0;
   });
 
+program
+  .command('stage')
+  .description('work the staging queue')
+  .argument('<action>', 'review | list | approve | reject')
+  .option('--all', 'apply to every staged issue (approve/reject only)')
+  .option('--key <issueKey...>', 'specific issue keys')
+  .action(async (action: string, opts: { all?: boolean; key?: string[] }) => {
+    const config = loadConfig();
+    const c = buildContainer(config);
+    const jql = `project = "${config.jira.projectKey}" AND status = "Staged" ORDER BY created ASC`;
+
+    if (action === 'list' || action === 'review') {
+      const issues = await c.tickets.search(jql);
+      if (issues.length === 0) {
+        console.log('\n  nothing staged\n');
+        return;
+      }
+      console.log(`\n  ${issues.length} staged\n`);
+      for (const i of issues) {
+        const due = i.dueDate ?? '—';
+        console.log(`    ${i.key.padEnd(12)} ${i.priority.padEnd(8)} due ${due}  ${i.summary}`);
+      }
+      console.log(`\n  approve:  npm run wf -- stage approve --key ${issues[0]?.key}`);
+      console.log(`  or all:   npm run wf -- stage approve --all\n`);
+      return;
+    }
+
+    if (action !== 'approve' && action !== 'reject') {
+      throw new Error(`unknown action "${action}" — use review, list, approve or reject`);
+    }
+
+    const target = opts.key?.length
+      ? opts.key.map((k) => k as never)
+      : opts.all
+        ? (await c.tickets.search(jql)).map((i) => i.key)
+        : null;
+
+    if (!target) throw new Error('pass --key <ISSUE-1> or --all');
+    if (target.length === 0) {
+      console.log('\n  nothing staged\n');
+      return;
+    }
+
+    const to = action === 'approve' ? 'To Do' : 'Rejected';
+    await c.tickets.transition(target, to);
+    console.log(`\n  ${target.length} → ${to}\n`);
+  });
+
 program.parseAsync(process.argv).catch((e: unknown) => {
   console.error(e instanceof Error ? e.message : String(e));
   process.exitCode = 1;

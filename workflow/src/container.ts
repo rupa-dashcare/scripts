@@ -5,6 +5,7 @@
 import { JiraDoctor } from './adapters/jira/JiraDoctor';
 import { JiraTicketStore } from './adapters/jira/JiraTicketStore';
 import { KvCredentialStore } from './adapters/cloudflare/KvCredentialStore';
+import { SlackSource } from './adapters/slack/SlackSource';
 import { Dedupe } from './core/Dedupe';
 import { DeterministicDrafter } from './core/DeterministicDrafter';
 import { Pipeline } from './core/Pipeline';
@@ -56,8 +57,18 @@ export function buildContainer(
       })
     : null;
 
-  // Phase 1+ registers real sources here. Phase 0 ships the wiring, not the adapters.
+  // Adding a source is a new class plus one register() line — nothing in core/ changes.
   const sources = new SourceRegistry();
+
+  const slack = config.slack.token && config.slack.userId && config.slack.teamId
+    ? new SlackSource({
+        token: config.slack.token,
+        userId: config.slack.userId,
+        teamId: config.slack.teamId,
+        triggerEmoji: config.slack.triggerEmoji,
+      })
+    : null;
+  if (slack) sources.register(slack);
 
   const pipeline = new Pipeline(
     sources,
@@ -70,6 +81,7 @@ export function buildContainer(
   );
 
   const checks: Checkable[] = [jira];
+  if (slack) checks.push(slack);
   if (kv) checks.push(kv);
 
   const setup = new JiraDoctor(
