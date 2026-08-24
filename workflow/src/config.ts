@@ -2,7 +2,14 @@ import { z } from 'zod';
 
 const Schema = z.object({
   jira: z.object({
+    /** Human-facing site URL — used for browse links and doctor remedies. */
     baseUrl: z.string().url(),
+    /**
+     * Set this when using a SCOPED API token. Scoped tokens 401 against the site
+     * URL and must go through https://api.atlassian.com/ex/jira/<cloudId>.
+     * Leave empty for a classic unscoped token.
+     */
+    cloudId: z.string().optional(),
     email: z.string().email(),
     apiToken: z.string().min(1),
     projectKey: z.string().min(1),
@@ -35,6 +42,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = Schema.safeParse({
     jira: {
       baseUrl: env.JIRA_BASE_URL,
+      cloudId: env.JIRA_CLOUD_ID || undefined,
       email: env.JIRA_EMAIL,
       apiToken: env.JIRA_API_TOKEN,
       projectKey: env.JIRA_PROJECT_KEY,

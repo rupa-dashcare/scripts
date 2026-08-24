@@ -3,7 +3,7 @@
  * dependency-cruiser fails the build if anything else imports src/adapters.
  */
 import { JiraDoctor } from './adapters/jira/JiraDoctor';
-import { JiraTicketStore } from './adapters/jira/JiraTicketStore';
+import { apiBaseUrl, JiraTicketStore } from './adapters/jira/JiraTicketStore';
 import { JiraUpstreamSource } from './adapters/jira/JiraUpstreamSource';
 import { KvCredentialStore } from './adapters/cloudflare/KvCredentialStore';
 import { SlackSource } from './adapters/slack/SlackSource';
@@ -46,7 +46,7 @@ export function buildContainer(
   const access = new ProjectAccess(config.jira.projectKey, config.jira.readProjectKeys);
 
   const jira = new JiraTicketStore({
-    baseUrl: config.jira.baseUrl,
+    apiBaseUrl: apiBaseUrl(config.jira.baseUrl, config.jira.cloudId),
     email: config.jira.email,
     apiToken: config.jira.apiToken,
     access,

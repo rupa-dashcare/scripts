@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ProjectAccess } from '../src/domain/ProjectAccess';
-import { JiraTicketStore } from '../src/adapters/jira/JiraTicketStore';
+import { apiBaseUrl, JiraTicketStore } from '../src/adapters/jira/JiraTicketStore';
 import type { IssueKey, TicketDraft } from '../src/domain/types';
 import { dedupeKey } from '../src/domain/fingerprint';
 
@@ -100,7 +100,7 @@ describe('JiraTicketStore honours the policy before any network call', () => {
     }) as typeof globalThis.fetch;
 
     const s = new JiraTicketStore({
-      baseUrl: 'https://casedrive.atlassian.net',
+      apiBaseUrl: 'https://casedrive.atlassian.net',
       email: 'rupa.patel@dashcaregroup.com',
       apiToken: 'token',
       access,
@@ -146,7 +146,7 @@ describe('JiraTicketStore honours the policy before any network call', () => {
     }) as typeof globalThis.fetch;
 
     const s = new JiraTicketStore({
-      baseUrl: 'https://x.atlassian.net', email: 'e@x.com', apiToken: 't', access, fetch,
+      apiBaseUrl: 'https://x.atlassian.net', email: 'e@x.com', apiToken: 't', access, fetch,
     });
 
     const draft: TicketDraft = {
@@ -158,5 +158,22 @@ describe('JiraTicketStore honours the policy before any network call', () => {
 
     const fields = (captured[0] as { fields: { project: { key: string } } }).fields;
     expect(fields.project.key).toBe('RUPA');
+  });
+});
+
+describe('API base URL selection', () => {
+  it('routes a scoped token through the api.atlassian.com gateway', () => {
+    expect(apiBaseUrl('https://casedrive.atlassian.net', 'abc-123'))
+      .toBe('https://api.atlassian.com/ex/jira/abc-123');
+  });
+
+  it('leaves a classic token on the site URL', () => {
+    expect(apiBaseUrl('https://casedrive.atlassian.net'))
+      .toBe('https://casedrive.atlassian.net');
+  });
+
+  it('tolerates a trailing slash', () => {
+    expect(apiBaseUrl('https://casedrive.atlassian.net/')).toBe('https://casedrive.atlassian.net');
+    expect(apiBaseUrl('https://casedrive.atlassian.net/', 'x')).toBe('https://api.atlassian.com/ex/jira/x');
   });
 });

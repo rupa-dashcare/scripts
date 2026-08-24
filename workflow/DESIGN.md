@@ -321,6 +321,12 @@ large backlog.
 - Custom fields: `Source` (select), `Source Key` (short text), `Source URL` (url).
 - A remote issue link back to the original, so "view original" is one click.
 - Auth by Atlassian account email plus an API token — far simpler than 3LO OAuth for one user.
+- **Use a scoped token.** Classic unscoped tokens are being retired, and a scoped one limits
+  what the token can do even though it cannot limit *which project* (§6.5). The catch: scoped
+  tokens **401 against the site URL** and must be sent to
+  `https://api.atlassian.com/ex/jira/<cloudId>`. `JIRA_CLOUD_ID` switches the adapter to that
+  gateway; the site URL is still used for browse links and doctor remedies, which are for
+  humans. Cloud id for this site: `1b26a94f-b647-4a17-9a8d-af5276f358bc`.
 
 ---
 

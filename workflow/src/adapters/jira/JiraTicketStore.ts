@@ -6,7 +6,12 @@ import { dedupeLabel } from '../../domain/fingerprint';
 import type { ProjectAccess } from '../../domain/ProjectAccess';
 
 export interface JiraOptions {
-  readonly baseUrl: string;
+  /**
+   * Where REST calls go. For a classic token this is the site URL; for a scoped
+   * token it must be https://api.atlassian.com/ex/jira/<cloudId>, which is what
+   * apiBaseUrl() builds. Scoped tokens 401 against the site URL.
+   */
+  readonly apiBaseUrl: string;
   readonly email: string;
   readonly apiToken: string;
   /** Every read and write is confined to this policy. See ProjectAccess. */
@@ -198,7 +203,7 @@ export class JiraTicketStore implements TicketStore, Checkable {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const auth = Buffer.from(`${this.opts.email}:${this.opts.apiToken}`).toString('base64');
-    const res = await this.http(`${this.opts.baseUrl}${path}`, {
+    const res = await this.http(`${this.opts.apiBaseUrl}${path}`, {
       method,
       headers: {
         authorization: `Basic ${auth}`,
@@ -235,6 +240,16 @@ interface JiraSearch {
 
 interface JiraTransitions {
   transitions: { id: string; name?: string; to?: { name?: string } }[];
+}
+
+/**
+ * Scoped API tokens must be used against the api.atlassian.com gateway; classic
+ * tokens work against the site URL. Passing the wrong one yields a bare 401 with
+ * no explanation, so this is worth getting right in one place.
+ */
+export function apiBaseUrl(siteUrl: string, cloudId?: string): string {
+  const site = siteUrl.replace(/\/+$/, '');
+  return cloudId ? `https://api.atlassian.com/ex/jira/${cloudId}` : site;
 }
 
 /** Jira Cloud wants Atlassian Document Format, not a plain string. */
