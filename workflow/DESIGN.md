@@ -328,8 +328,8 @@ The policy is narrower than the token:
 | | Projects |
 |---|---|
 | **Write** — create, transition, update, comment | `RUPA` only |
-| **Read** | `RUPA`, `PP` (DashCare App), `DL` (Data Lake) |
-| **Everything else** | no access at all |
+| **Read** | `RUPA`, `PP` (DashCare App), `DL` (Data Lake), `DEV` (DevOps) |
+| **Everything else** — `CB`, `CD`, `CF` | no access at all |
 
 `ProjectAccess` enforces this, and every Jira call routes through it.
 
@@ -338,7 +338,7 @@ losing game. Instead the caller's query is wrapped:
 
 ```
 caller:   project = CB OR assignee = currentUser()
-sent:     project IN ("RUPA", "PP", "DL") AND (project = CB OR assignee = currentUser())
+sent:     project IN ("RUPA", "PP", "DL", "DEV") AND (project = CB OR assignee = currentUser())
 ```
 
 `AND` cannot be escaped from, so no clause the caller writes — including one a model
@@ -356,8 +356,8 @@ the wrapping surfaces as a loud failure rather than silent over-reach.
 
 It guarantees **this system** cannot touch another project. It does **not** make the token
 itself safe — anything else holding that token still has full account access. The only real
-credential-level boundary is a separate Atlassian **service account** with access to `RUPA`,
-`PP` and `DL` alone, which needs org-admin rights and a licence seat. Worth doing if this
+credential-level boundary is a separate Atlassian **service account** holding only these four
+projects, which needs org-admin rights and a licence seat. Worth doing if this
 ever runs somewhere I do not fully control; the code guard is the right control for now.
 
 ---

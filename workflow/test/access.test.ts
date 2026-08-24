@@ -4,12 +4,12 @@ import { JiraTicketStore } from '../src/adapters/jira/JiraTicketStore';
 import type { IssueKey, TicketDraft } from '../src/domain/types';
 import { dedupeKey } from '../src/domain/fingerprint';
 
-const access = new ProjectAccess('RUPA', ['PP', 'DL']);
+const access = new ProjectAccess('RUPA', ['PP', 'DL', 'DEV']);
 
 describe('ProjectAccess — read confinement', () => {
   it('wraps a plain query so it cannot widen', () => {
     expect(access.confineRead('status = Staged'))
-      .toBe('project IN ("RUPA", "PP", "DL") AND (status = Staged)');
+      .toBe('project IN ("RUPA", "PP", "DL", "DEV") AND (status = Staged)');
   });
 
   // The whole point: an attacker-supplied or hallucinated clause is neutralised
@@ -17,28 +17,28 @@ describe('ProjectAccess — read confinement', () => {
   it.each([
     'project = CB',
     'project != RUPA',
-    'project IN (CB, CD, CF, DEV)',
+    'project IN (CB, CD, CF)',
     'status = Done OR project = CB',
     'assignee = currentUser() OR 1 = 1',
   ])('neutralises %s', (hostile) => {
     const jql = access.confineRead(hostile);
-    expect(jql.startsWith('project IN ("RUPA", "PP", "DL") AND (')).toBe(true);
+    expect(jql.startsWith('project IN ("RUPA", "PP", "DL", "DEV") AND (')).toBe(true);
     expect(jql).toContain(hostile);
   });
 
   it('lifts ORDER BY out so the result is valid JQL', () => {
     expect(access.confineRead('status = Staged ORDER BY created ASC'))
-      .toBe('project IN ("RUPA", "PP", "DL") AND (status = Staged) ORDER BY created ASC');
+      .toBe('project IN ("RUPA", "PP", "DL", "DEV") AND (status = Staged) ORDER BY created ASC');
   });
 
   it('handles a bare ORDER BY with no where clause', () => {
     expect(access.confineRead('ORDER BY created DESC'))
-      .toBe('project IN ("RUPA", "PP", "DL") ORDER BY created DESC');
+      .toBe('project IN ("RUPA", "PP", "DL", "DEV") ORDER BY created DESC');
   });
 
   it('ignores an ORDER BY that is only inside a quoted string', () => {
     const jql = access.confineRead('summary ~ "order by tuesday"');
-    expect(jql).toBe('project IN ("RUPA", "PP", "DL") AND (summary ~ "order by tuesday")');
+    expect(jql).toBe('project IN ("RUPA", "PP", "DL", "DEV") AND (summary ~ "order by tuesday")');
   });
 
   it('confines dedup reads to the write project alone', () => {
@@ -72,14 +72,15 @@ describe('ProjectAccess — write confinement', () => {
   });
 
   it('reads span the allowlist but writes never do', () => {
-    for (const k of ['RUPA-1', 'PP-1', 'DL-1']) expect(access.canRead(k)).toBe(true);
-    for (const k of ['CB-1', 'CD-1', 'CF-1', 'DEV-1']) expect(access.canRead(k)).toBe(false);
-    expect(access.canWrite('PP-1')).toBe(false);
+    for (const k of ['RUPA-1', 'PP-1', 'DL-1', 'DEV-1']) expect(access.canRead(k)).toBe(true);
+    for (const k of ['CB-1', 'CD-1', 'CF-1']) expect(access.canRead(k)).toBe(false);
+    // readable never implies writable
+    for (const k of ['PP-1', 'DL-1', 'DEV-1']) expect(access.canWrite(k)).toBe(false);
   });
 
   it('catches a leak in the response even if confine failed', () => {
     expect(() => access.assertReadable(['RUPA-1', 'CB-9'])).toThrow(/outside/);
-    expect(() => access.assertReadable(['RUPA-1', 'PP-2', 'DL-3'])).not.toThrow();
+    expect(() => access.assertReadable(['RUPA-1', 'PP-2', 'DL-3', 'DEV-4'])).not.toThrow();
   });
 
   it('rejects an invalid project key at construction', () => {
