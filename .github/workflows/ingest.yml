@@ -38,9 +38,12 @@ jobs:
         run: npm run wf -- ingest ${{ inputs.dry_run && '--dry-run' || '' }}
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          # Without this a scoped token 401s against the site URL — see DESIGN.md §6.
+          JIRA_CLOUD_ID: ${{ secrets.JIRA_CLOUD_ID }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+          JIRA_READ_PROJECT_KEYS: ${{ secrets.JIRA_READ_PROJECT_KEYS }}
           JIRA_FIELD_SOURCE: ${{ secrets.JIRA_FIELD_SOURCE }}
           JIRA_FIELD_SOURCE_KEY: ${{ secrets.JIRA_FIELD_SOURCE_KEY }}
           JIRA_FIELD_SOURCE_URL: ${{ secrets.JIRA_FIELD_SOURCE_URL }}
@@ -52,3 +55,5 @@ jobs:
           SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
           SLACK_TRIGGER_EMOJI: ${{ vars.SLACK_TRIGGER_EMOJI }}
           INCIDENT_CHANNELS: ${{ vars.INCIDENT_CHANNELS }}
+          # Set the LOG_LEVEL repo variable to `debug` to get per-request lines.
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'info' }}
